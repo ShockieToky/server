@@ -19,5 +19,11 @@ services:
     App\:
         resource: '../src/'
 
-    # add more service definitions when explicit configuration is needed
-    # please note that last definitions always *replace* previous ones
+    # Tag automatique sur tous les passifs — pas de config à ajouter pour chaque nouveau passif
+    _instanceof:
+        App\Passive\PassiveInterface:
+            tags: ['app.passive']
+
+    App\Service\PassiveRegistry:
+        arguments:
+            $passives: !tagged_iterator app.passive

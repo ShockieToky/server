@@ -1,0 +1,7 @@
+lexik_jwt_authentication:
+    # HMAC HS256 : une seule clé secrète (pas de fichiers PEM)
+    secret_key: '%env(JWT_SECRET_KEY)%'
+    public_key: '%env(JWT_SECRET_KEY)%'
+    pass_phrase: ''
+    encoder:
+        signature_algorithm: HS256

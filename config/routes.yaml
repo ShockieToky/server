@@ -9,3 +9,7 @@
 
 controllers:
     resource: routing.controllers
+
+app_api:
+    resource: ../src/Controller/
+    type: attribute
