@@ -129,6 +129,7 @@ class ManualBattleController extends AbstractController
         $pending   = $state['pending']     ?? [];
         $moonPhase = (int) ($state['moonPhase']    ?? 0);
         $actionCnt = (int) ($state['actionCount']  ?? 0);
+        $skipStartOfTurn = (bool) ($state['startOfTurnDone'] ?? false);
         $log       = array_map(fn($e) => new TurnEntry($e['type'], $e['actorId'], $e['actorName'], $e['targetId'] ?? null, $e['targetName'] ?? null, $e['data'] ?? []), $state['log'] ?? []);
 
         $currentActorId = $state['currentActorId'] ?? ($pending[0] ?? null);
@@ -136,9 +137,9 @@ class ManualBattleController extends AbstractController
             return $this->json(['message' => 'Aucun acteur en cours'], Response::HTTP_BAD_REQUEST);
         }
 
-        // ── Exécuter le step ───────────────────────────────────────────────────
+        // ── Exécuter le step ─────────────────────────────────────────────────────
         $result = $this->battleService->executeManualStep(
-            $heroes, $enemies, $currentActorId, $attackId, $log, $moonPhase, $actionCnt, $targetId,
+            $heroes, $enemies, $currentActorId, $attackId, $log, $moonPhase, $actionCnt, $targetId, $skipStartOfTurn,
         );
 
         // ── Mettre à jour le pending ───────────────────────────────────────────
@@ -174,7 +175,33 @@ class ManualBattleController extends AbstractController
         });
 
         $nextActorId = $pending[0] ?? null;
-        $newState    = $this->buildState($heroes, $enemies, $pending, $moonPhase, $actionCnt, $log, 'choose_attack', null, $nextActorId);
+
+        // ── Pré-traitement du début de tour du prochain acteur ──────────────────
+        $startOfTurnDone = false;
+        if ($nextActorId !== null) {
+            $nextActor = $combatantMap[$nextActorId] ?? null;
+            if ($nextActor !== null && $nextActor->isAlive()) {
+                $nextAllies = $nextActor->side === 'player' ? $heroes : $enemies;
+                $nextFoes   = $nextActor->side === 'player' ? $enemies : $heroes;
+                $survived = $this->battleService->processActorStartOfTurn($nextActor, $nextAllies, $nextFoes, $moonPhase, $log);
+                if (!$survived) {
+                    $pending = array_values(array_filter($pending, fn($id) => ($combatantMap[$id] ?? null)?->isAlive()));
+                    $aliveH  = !empty(array_filter($heroes,  fn(Combatant $c) => $c->isAlive()));
+                    $aliveE  = !empty(array_filter($enemies, fn(Combatant $c) => $c->isAlive()));
+                    if (!$aliveH || !$aliveE) {
+                        $winner   = $aliveH ? 'player' : 'enemy';
+                        $newState = $this->buildState($heroes, $enemies, [], $moonPhase, $actionCnt, $log, 'finished', $winner);
+                        return $this->json($newState);
+                    }
+                    $nextActorId = $pending[0] ?? null;
+                } else {
+                    $startOfTurnDone = true;
+                }
+            }
+        }
+
+        $newState = $this->buildState($heroes, $enemies, $pending, $moonPhase, $actionCnt, $log, 'choose_attack', null, $nextActorId);
+        $newState['startOfTurnDone'] = $startOfTurnDone;
 
         return $this->json($newState);
     }
@@ -209,6 +236,8 @@ class ManualBattleController extends AbstractController
             $ext     = $this->computeExtBonuses($cfg['extensions'] ?? []);
 
             $ctx = new CombatContext();
+            $ctx->heroIndex = $i;
+            $ctx->teamSize  = count($heroEntities);
             foreach ($heroEntities as $j => [$other, $_]) {
                 if ($j === $i) continue;
                 /** @var Hero $other */
@@ -252,6 +281,9 @@ class ManualBattleController extends AbstractController
                 $shieldHp = $hp * $ctx->initialShieldPct / 100.0;
                 $combatant->applyEffect(new ActiveEffect('bouclier', 'Bouclier initial', 'positive', 999, $ctx->initialShieldPct, $shieldHp));
             }
+
+            $combatant->passiveTraits['_factionName'] = $hero->getFaction()?->getName();
+            $combatant->passiveTraits['_origineName'] = $hero->getOrigine()?->getName();
 
             $combatants[] = $combatant;
         }
@@ -330,9 +362,10 @@ class ManualBattleController extends AbstractController
         foreach ($all as $c) {
             $attacks[$c->id] = array_map(function ($a) use ($c) {
                 return [
-                    'id'         => $a->getId(),
-                    'name'       => $a->getName(),
-                    'scalingStat'=> $a->getScalingStat(),
+                    'id'          => $a->getId(),
+                    'name'        => $a->getName(),
+                    'description' => $a->getDescription(),
+                    'scalingStat' => $a->getScalingStat(),
                     'scalingPct' => $a->getScalingPct(),
                     'hitCount'   => $a->getHitCount(),
                     'targetType' => $a->getTargetType(),

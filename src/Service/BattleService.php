@@ -21,8 +21,8 @@ use App\Entity\AttackEffect;
  *
  * ── Formule de dégâts ────────────────────────────────────────────────────────
  *   stat       = baseStat(scalingStat) × statBuff(attaquant)
- *   rawPerHit  = stat × (scalingPct / 100) / hitCount
- *   critMult   = isCrit ? critDamage/100 : 1.0   (crit lancé 1 fois par sort)
+ *   rawPerHit  = stat × (scalingPct / 100)   (plein scaling appliqué à chaque hit)
+ *   critMult   = isCrit ? 1 + critDamage/100 : 1.0   (crit relancé indépendamment par hit)
  *   defPen     = ignore_defense ? 0 : effectiveDef / (effectiveDef + 1000)
  *   dmgPerHit  = max(1, floor(rawPerHit × critMult × (1 - defPen)))
  * ─────────────────────────────────────────────────────────────────────────────
@@ -235,7 +235,7 @@ class BattleService
                 }
 
                 // ── Fin de tour ───────────────────────────────────────────────
-                $this->endOfTurn($actor);
+                $this->endOfTurn($actor, skipEffectTick: $extraTurn);
 
                 // ── Regain de tour : réinsertion dans le pending ──────────────
                 if ($extraTurn && $actor->isAlive()) {
@@ -317,13 +317,11 @@ class BattleService
 
         $scalingPct = $attack->getScalingPct() / 100.0;
         $hitCount   = max(1, $attack->getHitCount());
-        $rawPerHit  = ($baseStat * $scalingPct) / $hitCount;
+        $rawPerHit  = $baseStat * $scalingPct;   // plein scaling par hit
 
-        // Crit : lancé une seule fois par compétence
+        // Crit : relancé indépendamment à chaque hit
         // critDamage représente le bonus en % au-dessus de ×1.0 (ex. 50 → ×1.5, 100 → ×2.0)
         $effectiveCritRate = $actor->critRate;
-        $isCrit            = random_int(0, 99) < $effectiveCritRate;
-        $critMult          = $isCrit ? 1.0 + $actor->critDamage / 100.0 : 1.0;
 
         // ignore_defense : vérifié une seule fois (effet instantané sur l'attaque elle-même)
         $ignoreDefense = $this->attackHasEffect($attack, 'ignore_defense');
@@ -354,11 +352,26 @@ class BattleService
                     $bonusMult *= 1.0 + $actor->passiveTraits['enclave_bonus_pct'] / 100.0;
                 }
             }
+            // Code spécial : sommeil_bonus_50 — +50% si la cible était endormie
+            if ($attack->getSpecialCode() === 'sommeil_bonus_50' && $wasAsleep) {
+                $bonusMult *= 1.5;
+            }
+            // Code spécial : sommeil_bonus_150 — +150% si la cible était endormie
+            if ($attack->getSpecialCode() === 'sommeil_bonus_150' && $wasAsleep) {
+                $bonusMult *= 2.5;
+            }
+
+            // Multiplicateur PvE : ×2 quand la cible est un ennemi (PvE uniquement, sans impact PvP)
+            $pveMult = $target->side === 'enemy' ? 2.0 : 1.0;
 
             // Application des hits
             $totalDmg = 0;
             for ($hit = 0; $hit < $hitCount; $hit++) {
-                $dmg    = max(1, (int) floor($rawPerHit * $critMult * $bonusMult * (1.0 - $defPen)));
+                // Crit relancé à chaque hit
+                $isCrit   = random_int(0, 99) < $effectiveCritRate;
+                $critMult = $isCrit ? 1.0 + $actor->critDamage / 100.0 : 1.0;
+
+                $dmg    = max(1, (int) floor($rawPerHit * $critMult * $bonusMult * $pveMult * (1.0 - $defPen)));
                 $dmg    = $this->computeIncomingAfterBlocks($target, $dmg, $log);
                 $actual    = $target->takeDamage($dmg);
                 $totalDmg += $actual;
@@ -375,6 +388,17 @@ class BattleService
 
                 if (!$target->isAlive()) {
                     $log[] = new TurnEntry('death', $target->id, $target->name);
+                    // Code spécial : kill_gain_invincibility — invincibilité 1 tour sur kill
+                    if ($attack->getSpecialCode() === 'kill_gain_invincibility') {
+                        $actor->applyEffect(new ActiveEffect('invincibilite', 'Invincibilité', 'positive', 1, 0.0));
+                        $log[] = new TurnEntry('effect_apply', $actor->id, $actor->name, data: [
+                            'effect'   => 'invincibilite',
+                            'label'    => 'Invincibilité (kill)',
+                            'polarity' => 'positive',
+                            'duration' => 1,
+                            'value'    => 0,
+                        ]);
+                    }
                     break;
                 }
 
@@ -426,6 +450,28 @@ class BattleService
         array     &$log,
     ): bool {
         $extraTurn = false;
+
+        // Code spécial : swap_effects — inverse les effets entre alliés et ennemis (par paire)
+        if ($attack->getSpecialCode() === 'swap_effects') {
+            $allyList = array_values($allies);
+            $foeList  = array_values($foes);
+            $maxPairs = max(count($allyList), count($foeList));
+            for ($i = 0; $i < $maxPairs; $i++) {
+                $ally        = $allyList[$i] ?? null;
+                $foe         = $foeList[$i]  ?? null;
+                $allyEffects = $ally ? $ally->activeEffects : [];
+                $foeEffects  = $foe  ? $foe->activeEffects  : [];
+                if ($ally) $ally->activeEffects = $foeEffects;
+                if ($foe)  $foe->activeEffects  = $allyEffects;
+            }
+            $log[] = new TurnEntry('effect_apply', $actor->id, $actor->name, data: [
+                'effect'   => 'swap_effects',
+                'label'    => 'Inversion des effets',
+                'polarity' => 'positive',
+            ]);
+            return $extraTurn;
+        }
+
         foreach ($attack->getAttackEffects() as $ae) {
             $effect = $ae->getEffect();
             if ($effect === null) continue;
@@ -547,10 +593,12 @@ class BattleService
 
     // ── Fin de tour ───────────────────────────────────────────────────────────
 
-    private function endOfTurn(Combatant $actor): void
+    private function endOfTurn(Combatant $actor, bool $skipEffectTick = false): void
     {
         $actor->tickCooldowns();
-        $actor->tickEffects();
+        if (!$skipEffectTick) {
+            $actor->tickEffects();
+        }
     }
 
     // ── Sélection des cibles ──────────────────────────────────────────────────
@@ -733,30 +781,26 @@ class BattleService
 
     // ── Lune : effets par phase ───────────────────────────────────────────────
 
-    /** Phase 0 – Lune Nouvelle : soin d'équipe. */
+    /** Phase 0 – Lune Nouvelle : soin du héros actif. */
     private function applyMoonNouvelleEffect(Combatant $actor, array $aliveAllies, int $tier, array &$log): void
     {
         $healPct = [5.0, 7.0, 10.0][$tier - 1] ?? 5.0;
-        foreach ($aliveAllies as $ally) {
-            $heal   = (int) ceil($ally->maxHp * $healPct / 100.0);
-            $healed = $ally->heal($heal);
-            if ($healed > 0) {
-                $log[] = new TurnEntry('heal', $actor->id, $actor->name, $ally->id, $ally->name, [
-                    'source' => 'moon_nouvelle',
-                    'heal'   => $healed,
-                    'hpLeft' => $ally->currentHp,
-                ]);
-            }
+        $heal   = (int) ceil($actor->maxHp * $healPct / 100.0);
+        $healed = $actor->heal($heal);
+        if ($healed > 0) {
+            $log[] = new TurnEntry('heal', $actor->id, $actor->name, $actor->id, $actor->name, [
+                'source' => 'moon_nouvelle',
+                'heal'   => $healed,
+                'hpLeft' => $actor->currentHp,
+            ]);
         }
     }
 
-    /** Phase 1 – Demi-Lune : extension des effets positifs. */
+    /** Phase 1 – Demi-Lune : extension des effets positifs du héros actif. */
     private function applyMoonDemiEffect(Combatant $actor, array $aliveAllies, int $tier, array &$log): void
     {
         $extendBy = $tier >= 3 ? 2 : 1;
-        foreach ($aliveAllies as $ally) {
-            $ally->extendPositiveEffects($extendBy);
-        }
+        $actor->extendPositiveEffects($extendBy);
         $log[] = new TurnEntry('effect_apply', $actor->id, $actor->name, data: [
             'effect'   => 'moon_demi',
             'label'    => "Demi-Lune (effets positifs +$extendBy tour)",
@@ -990,6 +1034,31 @@ class BattleService
     // ── Mode combat manuel ────────────────────────────────────────────────────
 
     /**
+     * Traite les effets de début de tour d'un acteur (DoT/HoT + traits passifs).
+     * Appelé par les controllers AVANT de retourner le state choose_attack,
+     * afin que le heal/buff soit visible avant que le joueur choisisse son attaque.
+     *
+     * Retourne false si l'acteur est mort pendant ce traitement.
+     *
+     * @param Combatant[] $allies  Alliés de l'acteur
+     * @param Combatant[] $foes    Ennemis de l'acteur
+     * @param TurnEntry[] $log
+     */
+    public function processActorStartOfTurn(
+        Combatant $actor,
+        array     $allies,
+        array     $foes,
+        int       &$moonPhase,
+        array     &$log,
+    ): bool {
+        $this->processTurnStartEffects($actor, $log);
+        if ($actor->isAlive()) {
+            $this->processTurnStartTraits($actor, $allies, $foes, $moonPhase, $log);
+        }
+        return $actor->isAlive();
+    }
+
+    /**
      * Exécute UNE action manuelle pour l'acteur indiqué.
      *
      * Appelé par ManualBattleController sur chaque step décidé par l'utilisateur.
@@ -1011,6 +1080,7 @@ class BattleService
         int      &$moonPhase,
         int      &$actionCount,
         ?string  $forcedTargetId = null,
+        bool     $skipStartOfTurn = false,
     ): array {
         // ── Trouver l'acteur ──────────────────────────────────────────────────
         $all   = array_merge($heroes, $enemies);
@@ -1028,18 +1098,20 @@ class BattleService
         $foes   = $actor->side === 'player' ? $enemies : $heroes;
 
         // ── Effets de début de tour (DoT / HoT) ───────────────────────────────
-        $this->processTurnStartEffects($actor, $log);
+        if (!$skipStartOfTurn) {
+            $this->processTurnStartEffects($actor, $log);
 
-        // ── Traits de début de tour ───────────────────────────────────────────
-        if ($actor->isAlive()) {
-            $this->processTurnStartTraits($actor, $allies, $foes, $moonPhase, $log);
-        }
+            // ── Traits de début de tour ───────────────────────────────────────────
+            if ($actor->isAlive()) {
+                $this->processTurnStartTraits($actor, $allies, $foes, $moonPhase, $log);
+            }
 
-        // ── Vérifier si mort après DoT ────────────────────────────────────────
-        if (!$actor->isAlive()) {
-            $aliveH = !empty(array_filter($heroes,  fn(Combatant $c) => $c->isAlive()));
-            $aliveE = !empty(array_filter($enemies, fn(Combatant $c) => $c->isAlive()));
-            return ['extraTurn' => false, 'battleOver' => !$aliveH || !$aliveE, 'heroesWin' => $aliveH];
+            // ── Vérifier si mort après DoT ────────────────────────────────────────
+            if (!$actor->isAlive()) {
+                $aliveH = !empty(array_filter($heroes,  fn(Combatant $c) => $c->isAlive()));
+                $aliveE = !empty(array_filter($enemies, fn(Combatant $c) => $c->isAlive()));
+                return ['extraTurn' => false, 'battleOver' => !$aliveH || !$aliveE, 'heroesWin' => $aliveH];
+            }
         }
 
         // ── Vérifier canAct (étourdi / endormi) ───────────────────────────────
@@ -1139,7 +1211,7 @@ class BattleService
         }
 
         // ── Fin de tour ───────────────────────────────────────────────────────
-        $this->endOfTurn($actor);
+        $this->endOfTurn($actor, skipEffectTick: $extraTurn);
 
         // ── Vérifier fin de combat ────────────────────────────────────────────
         $aliveH = !empty(array_filter($heroes,  fn(Combatant $c) => $c->isAlive()));

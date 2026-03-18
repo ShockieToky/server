@@ -131,8 +131,8 @@ class TestCombatController extends AbstractController
             $ext     = $this->computeExtBonuses($cfg['extensions'] ?? []);
 
             // ── CombatContext & passifs ───────────────────────────────────────
-            $ctx = new CombatContext();
-            foreach ($heroEntities as $j => [$other, $_]) {
+            $ctx = new CombatContext();            $ctx->heroIndex = $i;
+            $ctx->teamSize  = count($heroEntities);            foreach ($heroEntities as $j => [$other, $_]) {
                 if ($j === $i) continue;
                 /** @var Hero $other */
                 if ($hero->getFaction() && $other->getFaction()?->getId() === $hero->getFaction()->getId()) {

@@ -210,6 +210,8 @@ class DungeonFightController extends AbstractController
         $earnedRewards = [];
         if ($result->victory) {
             foreach ($dungeon->getRewards() as $reward) {
+                // Jet de chance de drop
+                if (random_int(1, 100) > $reward->getDropChance()) continue;
                 $qty = $reward->rollQuantity();
                 $earnedRewards[] = [
                     'rewardType'  => $reward->getRewardType(),

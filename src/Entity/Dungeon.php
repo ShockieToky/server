@@ -31,6 +31,10 @@ class Dungeon
     #[ORM\Column(length: 12, options: ['default' => 'normal'])]
     private string $difficulty = 'normal';
 
+    /** Catégorie d'affichage (ex: "Centre de recherche", "Forêt", …). */
+    #[ORM\Column(length: 100, options: ['default' => 'Général'])]
+    private string $category = 'Général';
+
     /** Donjon visible et jouable. */
     #[ORM\Column(options: ['default' => true])]
     private bool $active = true;
@@ -62,6 +66,9 @@ class Dungeon
 
     public function getDifficulty(): string { return $this->difficulty; }
     public function setDifficulty(string $d): self { $this->difficulty = $d; return $this; }
+
+    public function getCategory(): string { return $this->category; }
+    public function setCategory(string $c): self { $this->category = $c; return $this; }
 
     public function isActive(): bool { return $this->active; }
     public function setActive(bool $v): self { $this->active = $v; return $this; }

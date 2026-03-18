@@ -100,6 +100,7 @@ class DungeonAdminController extends AbstractController
     {
         if (isset($data['name']))        $dungeon->setName((string) $data['name']);
         if (isset($data['description'])) $dungeon->setDescription($data['description'] ?: null);
+        if (isset($data['category']))    $dungeon->setCategory((string) $data['category']);
         if (isset($data['active']))      $dungeon->setActive((bool) $data['active']);
         if (isset($data['difficulty']) && in_array($data['difficulty'], Dungeon::DIFFICULTIES, true)) {
             $dungeon->setDifficulty($data['difficulty']);
@@ -127,6 +128,7 @@ class DungeonAdminController extends AbstractController
             $reward->setRewardType((string) ($rData['rewardType'] ?? 'gold'));
             $reward->setQuantityMin((int) max(1, $rData['quantityMin'] ?? $rData['quantity'] ?? 1));
             $reward->setQuantityMax((int) max(1, $rData['quantityMax'] ?? $rData['quantity'] ?? 1));
+            $reward->setDropChance((int) ($rData['dropChance'] ?? 100));
             if ($reward->getQuantityMax() < $reward->getQuantityMin()) {
                 $reward->setQuantityMax($reward->getQuantityMin());
             }
@@ -149,6 +151,7 @@ class DungeonAdminController extends AbstractController
             'id'          => $d->getId(),
             'name'        => $d->getName(),
             'description' => $d->getDescription(),
+            'category'    => $d->getCategory(),
             'difficulty'  => $d->getDifficulty(),
             'active'      => $d->isActive(),
         ];
@@ -171,6 +174,7 @@ class DungeonAdminController extends AbstractController
                 'rewardType'  => $r->getRewardType(),
                 'quantityMin' => $r->getQuantityMin(),
                 'quantityMax' => $r->getQuantityMax(),
+                'dropChance'  => $r->getDropChance(),
                 'itemId'      => $r->getItem()?->getId(),
                 'itemName'    => $r->getItem()?->getName(),
                 'scrollId'    => $r->getScroll()?->getId(),

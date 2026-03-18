@@ -11,10 +11,10 @@ use App\Passive\PassiveInterface;
  * À chaque début de tour d'un héros de cette faction, la lune change de phase
  * (cycle : Nouvelle → Demi → Pleine → Nouvelle…).
  *
- * Nouvelle lune : soigne tous les alliés de X % PV max
+ * Nouvelle lune : soigne ce héros de X % PV max
  *   Tier 1 : 5 % | Tier 2 : 7 % | Tier 3 : 10 %
  *
- * Demi-Lune : prolonge la durée de tous les effets bénéfiques alliés
+ * Demi-Lune : prolonge la durée des effets bénéfiques de ce héros
  *   Tier 1 : +1 tour | Tier 2 : +1 | Tier 3 : +2
  *
  * Pleine Lune : applique aug_attaque 2 tours à ce héros

@@ -35,6 +35,10 @@ class DungeonReward
     #[ORM\Column(options: ['default' => 1])]
     private int $quantityMax = 1;
 
+    /** Probabilité de drop en % (1–100). 100 = drop garanti. */
+    #[ORM\Column(options: ['default' => 100])]
+    private int $dropChance = 100;
+
     /** Rempli si rewardType = 'item'. */
     #[ORM\ManyToOne(targetEntity: Item::class)]
     #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
@@ -60,6 +64,9 @@ class DungeonReward
 
     public function getQuantityMax(): int { return $this->quantityMax; }
     public function setQuantityMax(int $q): self { $this->quantityMax = max(1, $q); return $this; }
+
+    public function getDropChance(): int { return $this->dropChance; }
+    public function setDropChance(int $c): self { $this->dropChance = max(1, min(100, $c)); return $this; }
 
     /** Tire un nombre aléatoire dans la plage [min, max]. */
     public function rollQuantity(): int

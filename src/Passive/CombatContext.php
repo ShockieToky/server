@@ -60,6 +60,16 @@ class CombatContext
     public array $passiveTraits = [];
 
     /**
+     * Position de ce héros dans l'équipe (0-basé).
+     * Utilisé par certains passifs (ex: DinosaurClan) pour identifier
+     * le dernier héros de l'équipe.
+     */
+    public int $heroIndex = 0;
+
+    /** Taille totale de l'équipe. */
+    public int $teamSize = 1;
+
+    /**
      * Effets textuels actifs (pour affichage en UI).
      * @var string[]
      */

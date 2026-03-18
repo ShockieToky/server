@@ -23,5 +23,11 @@ class ActiveEffect
         public readonly float $value,
         /** PV de bouclier restants (uniquement pour l'effet 'bouclier'). */
         public float $shieldHp = 0.0,
+        /**
+         * Marqueur « appliqué ce tour-ci ».
+         * Le premier appel à tickEffects() l'ignore et le passe à false,
+         * garantissant qu'un effet durée=1 survit au tick de fin du tour où il est posé.
+         */
+        public bool $fresh = true,
     ) {}
 }

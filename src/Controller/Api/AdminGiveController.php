@@ -192,9 +192,9 @@ class AdminGiveController extends AbstractController
         }
 
         $data  = json_decode($request->getContent(), true) ?? [];
-        $scope = $data['scope'] ?? ['heroes', 'inventory', 'extensions', 'starter', 'story'];
+        $scope = $data['scope'] ?? ['heroes', 'inventory', 'extensions', 'starter', 'story', 'gold', 'history_token'];
         if (empty($scope)) {
-            $scope = ['heroes', 'inventory', 'extensions', 'starter', 'story'];
+            $scope = ['heroes', 'inventory', 'extensions', 'starter', 'story', 'gold', 'history_token'];
         }
 
         $done = [];
@@ -231,6 +231,16 @@ class AdminGiveController extends AbstractController
                 $this->em->remove($p);
             }
             $done[] = 'progression histoire';
+        }
+
+        if (in_array('gold', $scope, true)) {
+            $user->setGoldToken(0);
+            $done[] = 'pièces d\'or';
+        }
+
+        if (in_array('history_token', $scope, true)) {
+            $user->setHistoryToken(0);
+            $done[] = 'pièces d\'histoire';
         }
 
         $this->em->flush();

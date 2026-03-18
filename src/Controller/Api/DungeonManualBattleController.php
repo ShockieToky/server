@@ -6,14 +6,16 @@ use App\Battle\ActiveEffect;
 use App\Battle\Combatant;
 use App\Battle\TurnEntry;
 use App\Entity\User;
-use App\Entity\UserStoryProgress;
+use App\Entity\UserDungeonProgress;
+use App\Entity\UserInventory;
 use App\Passive\CombatContext;
 use App\Repository\AttackRepository;
+use App\Repository\DungeonRepository;
 use App\Repository\HeroRepository;
 use App\Repository\MonsterRepository;
-use App\Repository\StoryStageRepository;
 use App\Repository\UserHeroRepository;
-use App\Repository\UserStoryProgressRepository;
+use App\Repository\UserDungeonProgressRepository;
+use App\Repository\UserInventoryRepository;
 use App\Service\BattleService;
 use App\Service\BonusResolverService;
 use Doctrine\ORM\EntityManagerInterface;
@@ -25,37 +27,38 @@ use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
- * Combat manuel pas à pas pour le mode Histoire.
+ * Combat manuel pas à pas pour les Donjons.
  *
- * POST /api/story/stage/{id}/manual/init  — Initialise le combat (retourne état + storyMeta)
- * POST /api/story/stage/{id}/manual/step  — Exécute une action (retourne nouvel état + storyMeta)
+ * POST /api/dungeon/{id}/manual/init  — Initialise le combat (retourne état + dungeonMeta)
+ * POST /api/dungeon/{id}/manual/step  — Exécute une action (retourne nouvel état + dungeonMeta)
  *
  * Protocole sans session : le client maintient l'état complet et le renvoie à chaque step.
  * Quand toutes les vagues sont battues, la progression est sauvegardée automatiquement.
  */
 #[IsGranted('IS_AUTHENTICATED_FULLY')]
-class StoryManualBattleController extends AbstractController
+class DungeonManualBattleController extends AbstractController
 {
     public function __construct(
-        private readonly StoryStageRepository        $stageRepository,
-        private readonly UserHeroRepository          $userHeroRepository,
-        private readonly UserStoryProgressRepository $progressRepository,
-        private readonly AttackRepository            $attackRepository,
-        private readonly HeroRepository              $heroRepository,
-        private readonly MonsterRepository           $monsterRepository,
-        private readonly BattleService               $battleService,
-        private readonly BonusResolverService        $bonusResolver,
-        private readonly EntityManagerInterface      $em,
+        private readonly DungeonRepository               $dungeonRepository,
+        private readonly UserHeroRepository              $userHeroRepository,
+        private readonly UserDungeonProgressRepository   $progressRepository,
+        private readonly UserInventoryRepository         $userInventoryRepository,
+        private readonly AttackRepository                $attackRepository,
+        private readonly HeroRepository                  $heroRepository,
+        private readonly MonsterRepository               $monsterRepository,
+        private readonly BattleService                   $battleService,
+        private readonly BonusResolverService            $bonusResolver,
+        private readonly EntityManagerInterface          $em,
     ) {}
 
     // ── Init ──────────────────────────────────────────────────────────────────
 
-    #[Route('/api/story/stage/{id}/manual/init', name: 'api_story_manual_init', methods: ['POST'])]
+    #[Route('/api/dungeon/{id}/manual/init', name: 'api_dungeon_manual_init', methods: ['POST'])]
     public function init(int $id, Request $request): JsonResponse
     {
-        $stage = $this->stageRepository->findWithWaves($id);
-        if (!$stage || !$stage->isActive()) {
-            return $this->json(['message' => 'Étape introuvable'], Response::HTTP_NOT_FOUND);
+        $dungeon = $this->dungeonRepository->findWithWaves($id);
+        if (!$dungeon || !$dungeon->isActive()) {
+            return $this->json(['message' => 'Donjon introuvable'], Response::HTTP_NOT_FOUND);
         }
 
         /** @var User $user */
@@ -92,16 +95,16 @@ class StoryManualBattleController extends AbstractController
             $selectedUserHeroes, $bonusFactionId, $bonusOrigineId, $enclaveDirection,
         );
 
-        $waveCombatants = $this->buildAllWaves($stage, $maxFoeAccDebuff);
+        $waveCombatants = $this->buildAllWaves($dungeon, $maxFoeAccDebuff);
         if (empty($waveCombatants)) {
-            return $this->json(['message' => "Ce stage n'a pas de vagues configurées"], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->json(['message' => "Ce donjon n'a pas de vagues configurées"], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         $firstWaveEnemies = $waveCombatants[0];
         $totalWaves       = count($waveCombatants);
 
         foreach ($firstWaveEnemies as $c) {
-            $c->aiMode = 'story';
+            $c->aiMode = 'advanced';
         }
 
         // ── Ordre initial (vitesse décroissante) ──────────────────────────────
@@ -112,9 +115,9 @@ class StoryManualBattleController extends AbstractController
         $state = $this->buildState($heroCombatants, $firstWaveEnemies, $pending, 0, 0, [], 'choose_attack', null);
 
         return $this->json([
-            'state'     => $state,
-            'storyMeta' => [
-                'stageId'          => $id,
+            'state'      => $state,
+            'dungeonMeta' => [
+                'dungeonId'        => $id,
                 'waveIndex'        => 0,
                 'totalWaves'       => $totalWaves,
                 'userHeroIds'      => array_map(fn($uh) => $uh->getId(), $selectedUserHeroes),
@@ -125,13 +128,14 @@ class StoryManualBattleController extends AbstractController
                 'waveCleared'      => false,
                 'victory'          => false,
                 'defeat'           => false,
+                'rewards'          => [],
             ],
         ]);
     }
 
     // ── Step ──────────────────────────────────────────────────────────────────
 
-    #[Route('/api/story/stage/{id}/manual/step', name: 'api_story_manual_step', methods: ['POST'])]
+    #[Route('/api/dungeon/{id}/manual/step', name: 'api_dungeon_manual_step', methods: ['POST'])]
     public function step(int $id, Request $request): JsonResponse
     {
         $body = json_decode($request->getContent(), true);
@@ -140,10 +144,10 @@ class StoryManualBattleController extends AbstractController
             return $this->json(['message' => 'État manquant'], Response::HTTP_BAD_REQUEST);
         }
 
-        $storyMeta  = is_array($body['storyMeta'] ?? null) ? $body['storyMeta'] : [];
-        $stageId    = (int) ($storyMeta['stageId']    ?? $id);
-        $waveIndex  = (int) ($storyMeta['waveIndex']  ?? 0);
-        $totalWaves = (int) ($storyMeta['totalWaves'] ?? 1);
+        $dungeonMeta  = is_array($body['dungeonMeta'] ?? null) ? $body['dungeonMeta'] : [];
+        $dungeonId    = (int) ($dungeonMeta['dungeonId']  ?? $id);
+        $waveIndex    = (int) ($dungeonMeta['waveIndex']  ?? 0);
+        $totalWaves   = (int) ($dungeonMeta['totalWaves'] ?? 1);
 
         $state    = $body['state'];
         $attackId = isset($body['attackId']) ? (int) $body['attackId'] : null;
@@ -184,7 +188,7 @@ class StoryManualBattleController extends AbstractController
         }
 
         foreach ($enemies as $c) {
-            $c->aiMode = 'story';
+            $c->aiMode = 'advanced';
         }
 
         // ── Exécution du step ──────────────────────────────────────────────────
@@ -205,8 +209,8 @@ class StoryManualBattleController extends AbstractController
                 // Défaite
                 $newState = $this->buildState($heroes, $enemies, [], $moonPhase, $actionCnt, $log, 'finished', 'enemy');
                 return $this->json([
-                    'state'     => $newState,
-                    'storyMeta' => array_merge($storyMeta, ['waveCleared' => false, 'victory' => false, 'defeat' => true]),
+                    'state'       => $newState,
+                    'dungeonMeta' => array_merge($dungeonMeta, ['waveCleared' => false, 'victory' => false, 'defeat' => true, 'rewards' => []]),
                 ]);
             }
 
@@ -218,49 +222,86 @@ class StoryManualBattleController extends AbstractController
                 $newState = $this->buildState($heroes, $enemies, [], $moonPhase, $actionCnt, $log, 'finished', 'player');
 
                 // Sauvegarde de la progression
-                $stage = $this->stageRepository->find($stageId);
+                $dungeon = $this->dungeonRepository->find($dungeonId);
                 /** @var User $user */
                 $user = $this->em->find(User::class, $this->getUser()->getId());
-                if ($stage !== null) {
-                    $progress = $this->progressRepository->findOneByUserAndStage($user, $stage);
+                $rewards = [];
+                if ($dungeon !== null) {
+                    $progress = $this->progressRepository->findOneByUserAndDungeon($user, $dungeon);
                     if ($progress === null) {
-                        $progress = new UserStoryProgress();
+                        $progress = new UserDungeonProgress();
                         $progress->setUser($user);
-                        $progress->setStage($stage);
+                        $progress->setDungeon($dungeon);
                         $this->em->persist($progress);
                     }
-                    if (!$progress->isCompleted()) {
-                        $progress->setCompletedAt(new \DateTimeImmutable());
-                        $this->em->flush();
+                    $progress->incrementRunCount();
+                    $progress->setLastCompletedAt(new \DateTimeImmutable());
+                    $this->em->flush();
+
+                    // Calcul et attribution des récompenses avec drop chance
+                    foreach ($dungeon->getRewards() as $r) {
+                        if (random_int(1, 100) > $r->getDropChance()) {
+                            continue;
+                        }
+                        $qty      = $r->rollQuantity();
+                        $rewards[] = [
+                            'rewardType' => $r->getRewardType(),
+                            'quantity'   => $qty,
+                            'item'       => $r->getItem()   ? ['id' => $r->getItem()->getId(),   'name' => $r->getItem()->getName()]   : null,
+                            'scroll'     => $r->getScroll() ? ['id' => $r->getScroll()->getId(), 'name' => $r->getScroll()->getName()] : null,
+                        ];
+
+                        // Attribution effective à l'utilisateur
+                        if ($r->getRewardType() === 'gold') {
+                            $user->setGoldToken($user->getGoldToken() + $qty);
+                        } elseif ($r->getRewardType() === 'item' && $r->getItem() !== null) {
+                            $inv = $this->userInventoryRepository->findByUserAndItem($user, $r->getItem());
+                            if ($inv === null) {
+                                $inv = (new UserInventory())->setUser($user)->setItem($r->getItem())->setQuantity($qty);
+                                $this->em->persist($inv);
+                            } else {
+                                $inv->setQuantity($inv->getQuantity() + $qty);
+                            }
+                        } elseif ($r->getRewardType() === 'scroll' && $r->getScroll() !== null) {
+                            $inv = $this->userInventoryRepository->findByUserAndScroll($user, $r->getScroll());
+                            if ($inv === null) {
+                                $inv = (new UserInventory())->setUser($user)->setScroll($r->getScroll())->setQuantity($qty);
+                                $this->em->persist($inv);
+                            } else {
+                                $inv->setQuantity($inv->getQuantity() + $qty);
+                            }
+                        }
                     }
+                    $this->em->flush();
                 }
 
                 return $this->json([
-                    'state'     => $newState,
-                    'storyMeta' => array_merge($storyMeta, [
+                    'state'       => $newState,
+                    'dungeonMeta' => array_merge($dungeonMeta, [
                         'waveIndex'   => $waveIndex,
                         'waveCleared' => true,
                         'victory'     => true,
                         'defeat'      => false,
+                        'rewards'     => $rewards,
                     ]),
                 ]);
             }
 
             // Vagues suivantes — les héros survivants sont conservés
-            $maxFoeAccDebuff = (int) ($storyMeta['maxFoeAccDebuff'] ?? 0);
-            $stage = $this->stageRepository->findWithWaves($stageId);
-            if ($stage === null) {
-                return $this->json(['message' => 'Étape introuvable'], Response::HTTP_NOT_FOUND);
+            $maxFoeAccDebuff = (int) ($dungeonMeta['maxFoeAccDebuff'] ?? 0);
+            $dungeon         = $this->dungeonRepository->findWithWaves($dungeonId);
+            if ($dungeon === null) {
+                return $this->json(['message' => 'Donjon introuvable'], Response::HTTP_NOT_FOUND);
             }
 
-            $waveCombatants = $this->buildAllWaves($stage, $maxFoeAccDebuff);
+            $waveCombatants = $this->buildAllWaves($dungeon, $maxFoeAccDebuff);
             $nextEnemies    = $waveCombatants[$nextWaveIndex] ?? [];
             if (empty($nextEnemies)) {
                 return $this->json(['message' => 'Données de vague manquantes'], Response::HTTP_INTERNAL_SERVER_ERROR);
             }
 
             foreach ($nextEnemies as $c) {
-                $c->aiMode = 'story';
+                $c->aiMode = 'advanced';
             }
 
             $aliveHeroes = array_values(array_filter($heroes, fn(Combatant $c) => $c->isAlive()));
@@ -272,12 +313,13 @@ class StoryManualBattleController extends AbstractController
             $newState = $this->buildState($aliveHeroes, $nextEnemies, $newPending, 0, 0, [], 'choose_attack', null);
 
             return $this->json([
-                'state'     => $newState,
-                'storyMeta' => array_merge($storyMeta, [
+                'state'       => $newState,
+                'dungeonMeta' => array_merge($dungeonMeta, [
                     'waveIndex'   => $nextWaveIndex,
                     'waveCleared' => true,
                     'victory'     => false,
                     'defeat'      => false,
+                    'rewards'     => [],
                 ]),
             ]);
         }
@@ -313,7 +355,7 @@ class StoryManualBattleController extends AbstractController
                     if (!$aliveH || !$aliveE) {
                         $winner   = $aliveH ? 'player' : 'enemy';
                         $newState = $this->buildState($heroes, $enemies, [], $moonPhase, $actionCnt, $log, 'finished', $winner);
-                        return $this->json(['state' => $newState, 'storyMeta' => array_merge($storyMeta, ['waveCleared' => false, 'victory' => $aliveH, 'defeat' => !$aliveH])]);
+                        return $this->json(['state' => $newState, 'dungeonMeta' => array_merge($dungeonMeta, ['waveCleared' => false, 'victory' => $aliveH, 'defeat' => !$aliveH, 'rewards' => []])]);
                     }
                     $nextActorId = $pending[0] ?? null;
                 } else {
@@ -337,15 +379,15 @@ class StoryManualBattleController extends AbstractController
         $newState['startOfTurnDone'] = $startOfTurnDone;
 
         return $this->json([
-            'state'     => $newState,
-            'storyMeta' => array_merge($storyMeta, ['waveCleared' => false, 'victory' => false, 'defeat' => false]),
+            'state'       => $newState,
+            'dungeonMeta' => array_merge($dungeonMeta, ['waveCleared' => false, 'victory' => false, 'defeat' => false]),
         ]);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
-     * Construit les Combatants héros depuis des UserHero (même logique que StoryFightController).
+     * Construit les Combatants héros depuis des UserHero.
      * Retourne [heroCombatants[], maxFoeAccDebuff].
      *
      * @param \App\Entity\UserHero[] $userHeroes
@@ -421,7 +463,7 @@ class StoryManualBattleController extends AbstractController
                 }
             }
 
-            // ID format: hero_{userHeroId}_{heroCatalogId}  (permet au step de retrouver les attaques)
+            // ID format: hero_{userHeroId}_{heroCatalogId}
             $combatant = new Combatant(
                 id:                 'hero_' . $userHero->getId() . '_' . $hero->getId(),
                 side:               'player',
@@ -463,10 +505,10 @@ class StoryManualBattleController extends AbstractController
     /**
      * @return list<list<Combatant>>
      */
-    private function buildAllWaves($stage, int $maxFoeAccDebuff): array
+    private function buildAllWaves($dungeon, int $maxFoeAccDebuff): array
     {
         $waves = [];
-        foreach ($stage->getWaves() as $wave) {
+        foreach ($dungeon->getWaves() as $wave) {
             $enemyCombatants = [];
             foreach ($wave->getWaveMonsters() as $wm) {
                 $monster = $wm->getMonster();
@@ -500,8 +542,6 @@ class StoryManualBattleController extends AbstractController
 
     /**
      * Reconstruit un Combatant depuis le snapshot d'état côté client.
-     * Pour les héros (side='player'), heroId (index 2 de l'ID) est l'ID du catalogue Hero.
-     * Pour les ennemis (side='enemy'), l'index 2 de l'ID est l'ID du Monster.
      */
     private function buildCombatantFromState(array $cs): ?Combatant
     {
@@ -588,17 +628,17 @@ class StoryManualBattleController extends AbstractController
         foreach ($all as $c) {
             $attacks[$c->id] = array_map(function ($a) use ($c) {
                 return [
-                    'id'          => $a->getId(),
-                    'name'        => $a->getName(),
-                    'description' => $a->getDescription(),
-                    'scalingStat' => $a->getScalingStat(),
-                    'scalingPct'  => $a->getScalingPct(),
-                    'hitCount'    => $a->getHitCount(),
-                    'targetType'  => $a->getTargetType(),
-                    'cooldown'    => $a->getCooldown(),
-                    'slotIndex'   => $a->getSlotIndex(),
-                    'onCooldown'  => ($c->cooldowns[$a->getId() ?? 0] ?? 0) > 0,
-                    'cooldownLeft'=> (int) ($c->cooldowns[$a->getId() ?? 0] ?? 0),
+                    'id'           => $a->getId(),
+                    'name'         => $a->getName(),
+                    'description'  => $a->getDescription(),
+                    'scalingStat'  => $a->getScalingStat(),
+                    'scalingPct'   => $a->getScalingPct(),
+                    'hitCount'     => $a->getHitCount(),
+                    'targetType'   => $a->getTargetType(),
+                    'cooldown'     => $a->getCooldown(),
+                    'slotIndex'    => $a->getSlotIndex(),
+                    'onCooldown'   => ($c->cooldowns[$a->getId() ?? 0] ?? 0) > 0,
+                    'cooldownLeft' => (int) ($c->cooldowns[$a->getId() ?? 0] ?? 0),
                 ];
             }, $c->attacks);
         }
@@ -622,27 +662,27 @@ class StoryManualBattleController extends AbstractController
     {
         // hero_{userHeroId}_{heroCatalogId} → parts[2] = heroCatalogId
         // enemy_{waveNum}_{monsterId}_{q}   → parts[2] = monsterId
-        $parts   = explode('_', $c->id);
-        $part2   = isset($parts[2]) ? (int) $parts[2] : 0;
+        $parts = explode('_', $c->id);
+        $part2 = isset($parts[2]) ? (int) $parts[2] : 0;
 
         return [
-            'id'               => $c->id,
-            'heroId'           => $c->side === 'player' ? $part2 : 0,
-            'monsterId'        => $c->side === 'enemy'  ? $part2 : 0,
-            'side'             => $c->side,
-            'name'             => $c->name,
-            'maxHp'            => $c->maxHp,
-            'currentHp'        => $c->currentHp,
-            'baseAttack'       => $c->baseAttack,
-            'baseDefense'      => $c->baseDefense,
-            'baseSpeed'        => $c->baseSpeed,
-            'critRate'         => $c->critRate,
-            'critDamage'       => $c->critDamage,
-            'accuracy'         => $c->accuracy,
-            'resistance'       => $c->resistance,
+            'id'                 => $c->id,
+            'heroId'             => $c->side === 'player' ? $part2 : 0,
+            'monsterId'          => $c->side === 'enemy'  ? $part2 : 0,
+            'side'               => $c->side,
+            'name'               => $c->name,
+            'maxHp'              => $c->maxHp,
+            'currentHp'          => $c->currentHp,
+            'baseAttack'         => $c->baseAttack,
+            'baseDefense'        => $c->baseDefense,
+            'baseSpeed'          => $c->baseSpeed,
+            'critRate'           => $c->critRate,
+            'critDamage'         => $c->critDamage,
+            'accuracy'           => $c->accuracy,
+            'resistance'         => $c->resistance,
             'damageReductionPct' => $c->damageReductionPct,
-            'passiveTraits'    => $c->passiveTraits,
-            'effects'          => array_map(fn(ActiveEffect $e) => [
+            'passiveTraits'      => $c->passiveTraits,
+            'effects'            => array_map(fn(ActiveEffect $e) => [
                 'name'           => $e->name,
                 'label'          => $e->label,
                 'polarity'       => $e->polarity,
@@ -650,8 +690,8 @@ class StoryManualBattleController extends AbstractController
                 'value'          => $e->value,
                 'shieldHp'       => $e->shieldHp,
             ], $c->activeEffects),
-            'cooldowns'        => $c->cooldowns,
-            'isDead'           => !$c->isAlive(),
+            'cooldowns'          => $c->cooldowns,
+            'isDead'             => !$c->isAlive(),
         ];
     }
 }

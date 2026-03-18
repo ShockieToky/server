@@ -215,6 +215,7 @@ class AttackAdminController extends AbstractController
         if (isset($data['scalingPct']))  $attack->setScalingPct((int) $data['scalingPct']);
         if (isset($data['targetType']))  $attack->setTargetType((string) $data['targetType']);
         if (isset($data['cooldown']))    $attack->setCooldown((int) $data['cooldown']);
+        if (array_key_exists('specialCode', $data)) $attack->setSpecialCode($data['specialCode']);
 
         // Effets attachés
         foreach ($data['effects'] ?? [] as $item) {
@@ -260,6 +261,7 @@ class AttackAdminController extends AbstractController
             'scalingPct'  => $a->getScalingPct(),
             'targetType'  => $a->getTargetType(),
             'cooldown'    => $a->getCooldown(),
+            'specialCode' => $a->getSpecialCode(),
             'effects'     => array_map(fn(AttackEffect $ae) => [
                 'id'            => $ae->getId(),
                 'effect'        => $this->serializeEffect($ae->getEffect()),

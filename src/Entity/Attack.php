@@ -72,6 +72,14 @@ class Attack
     #[ORM\Column(type: 'smallint', options: ['default' => 0])]
     private int $cooldown = 0;
 
+    /**
+     * Code de comportement spécial (hardcodé dans BattleService).
+     * null = pas de comportement spécial.
+     * Exemples : 'sommeil_bonus_50'
+     */
+    #[ORM\Column(length: 60, nullable: true)]
+    private ?string $specialCode = null;
+
     /** @var Collection<int, AttackEffect> */
     #[ORM\OneToMany(mappedBy: 'attack', targetEntity: AttackEffect::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['id' => 'ASC'])]
@@ -115,6 +123,9 @@ class Attack
 
     public function getCooldown(): int { return $this->cooldown; }
     public function setCooldown(int $c): self { $this->cooldown = max(0, $c); return $this; }
+
+    public function getSpecialCode(): ?string { return $this->specialCode; }
+    public function setSpecialCode(?string $code): self { $this->specialCode = $code ?: null; return $this; }
 
     /** @return Collection<int, AttackEffect> */
     public function getAttackEffects(): Collection { return $this->attackEffects; }

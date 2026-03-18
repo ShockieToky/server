@@ -260,6 +260,11 @@ class Combatant
     {
         $expired = [];
         foreach ($this->activeEffects as $e) {
+            // Les effets appliqués ce même tour sont protégés du premier tick.
+            if ($e->fresh) {
+                $e->fresh = false;
+                continue;
+            }
             $e->remainingTurns--;
             if ($e->remainingTurns <= 0) {
                 $expired[] = $e->name;
