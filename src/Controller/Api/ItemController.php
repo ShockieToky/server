@@ -86,6 +86,7 @@ class ItemController extends AbstractController
     {
         if (isset($data['name']))        $item->setName(trim($data['name']));
         if (isset($data['description'])) $item->setDescription($data['description']);
+        if (array_key_exists('effectType', $data)) $item->setEffectType($data['effectType'] ?: null);
     }
 
     private function serialize(Item $item): array
@@ -94,6 +95,7 @@ class ItemController extends AbstractController
             'id'          => $item->getId(),
             'name'        => $item->getName(),
             'description' => $item->getDescription(),
+            'effectType'  => $item->getEffectType(),
         ];
     }
 }

@@ -19,6 +19,10 @@ class Item
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $description = null;
 
+    /** Identifiant fonctionnel de l'effet (ex: 'magic_stone'). Null pour les items génériques. */
+    #[ORM\Column(length: 50, nullable: true)]
+    private ?string $effectType = null;
+
     public function getId(): ?int
     {
         return $this->id;
@@ -45,4 +49,7 @@ class Item
         $this->description = $description;
         return $this;
     }
+
+    public function getEffectType(): ?string { return $this->effectType; }
+    public function setEffectType(?string $effectType): self { $this->effectType = $effectType; return $this; }
 }

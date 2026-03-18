@@ -36,6 +36,29 @@ class CombatContext
     public float $critDamageBonus    = 0.0;
     public float $healingMultiplier  = 1.0;
 
+    // --- Modificateurs supplémentaires ---
+
+    /** Bonus flat de vitesse (ex: crealia +10 vitesse). */
+    public int $flatSpeedBonus = 0;
+
+    /** Bonus flat de résistance en points % (ex: samora +9%). */
+    public int $resistanceBonus = 0;
+
+    /** Malus de précision appliqué aux ennemis (ex: aride -12%). */
+    public int $foesAccuracyDebuffPct = 0;
+
+    /** Réduction % de tous les dégâts subis (ex: mystique -8%). */
+    public float $damageReductionPct = 0.0;
+
+    /** Bouclier initial en % des PV max (ex: kilima 9%). */
+    public float $initialShieldPct = 0.0;
+
+    /**
+     * Comportements runtime transmis au Combatant (procs, traits de combat).
+     * @var array<string, mixed>
+     */
+    public array $passiveTraits = [];
+
     /**
      * Effets textuels actifs (pour affichage en UI).
      * @var string[]

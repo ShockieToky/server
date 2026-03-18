@@ -57,6 +57,32 @@ class UserInventoryRepository extends ServiceEntityRepository
         return $this->findOneBy(['user' => $user, 'scroll' => $scroll]);
     }
 
+    /** Retourne l'entrée d'inventaire contenant les pierres magiques de l'utilisateur. */
+    public function findMagicStones(\App\Entity\User $user): ?UserInventory
+    {
+        return $this->createQueryBuilder('ui')
+            ->join('ui.item', 'i')
+            ->andWhere('ui.user = :user')
+            ->andWhere('i.effectType = :et')
+            ->setParameter('user', $user)
+            ->setParameter('et', 'magic_stone')
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
+    /** Retourne l'entrée d'inventaire contenant les pierres d'âme de l'utilisateur. */
+    public function findSoulStones(\App\Entity\User $user): ?UserInventory
+    {
+        return $this->createQueryBuilder('ui')
+            ->join('ui.item', 'i')
+            ->andWhere('ui.user = :user')
+            ->andWhere('i.effectType = :et')
+            ->setParameter('user', $user)
+            ->setParameter('et', 'soul_stone')
+            ->getQuery()
+            ->getOneOrNullResult();
+    }
+
     public function save(UserInventory $entry, bool $flush = false): void
     {
         $this->getEntityManager()->persist($entry);

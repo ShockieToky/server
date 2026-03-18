@@ -20,6 +20,8 @@ class HeritageNomadePassive implements PassiveInterface
         return 'heritage_nomade';
     }
 
+    public function thresholds(): array { return [1, 3, 5]; }
+
     public function apply(CombatContext $context): void
     {
         $count = $context->effectiveOrigineCount();

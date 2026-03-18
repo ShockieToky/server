@@ -20,6 +20,14 @@ interface PassiveInterface
     public function getSlug(): string;
 
     /**
+     * Paliers de héros requis pour activer / monter de tier le passif.
+     * Exemple : [1, 3, 6] signifie « tier 1 à partir de 1 allié, tier 2 à 3, tier 3 à 6 ».
+     *
+     * @return list<int>
+     */
+    public function thresholds(): array;
+
+    /**
      * Applique les effets du passif sur le contexte de combat.
      * Lit les compteurs d'alliés dans $context et modifie ses modificateurs.
      */

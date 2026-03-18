@@ -41,6 +41,11 @@ class ItemRepository extends ServiceEntityRepository
     //        ;
     //    }
 
+    public function findByEffectType(string $effectType): ?Item
+    {
+        return $this->findOneBy(['effectType' => $effectType]);
+    }
+
     public function save(Item $item, bool $flush = false): void
     {
         $this->getEntityManager()->persist($item);

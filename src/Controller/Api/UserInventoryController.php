@@ -172,8 +172,8 @@ class UserInventoryController extends AbstractController
             'id'       => $entry->getId(),
             'type'     => $entry->getType(),
             'quantity' => $entry->getQuantity(),
-            'item'     => $item   ? ['id' => $item->getId(),   'name' => $item->getName(),   'description' => $item->getDescription()]   : null,
-            'scroll'   => $scroll ? ['id' => $scroll->getId(), 'name' => $scroll->getName(), 'description' => $scroll->getDescription()] : null,
+            'item'     => $item   ? ['id' => $item->getId(),   'name' => $item->getName(),   'description' => $item->getDescription(),   'effectType' => $item->getEffectType()]   : null,
+            'scroll'   => $scroll ? ['id' => $scroll->getId(), 'name' => $scroll->getName(), 'description' => $scroll->getDescription(), 'scrollType' => $scroll->getType()] : null,
         ];
     }
 }

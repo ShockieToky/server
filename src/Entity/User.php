@@ -49,6 +49,9 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type: 'integer', options: ['default' => 0])]
     private int $historyToken = 0;
 
+    #[ORM\Column(options: ['default' => false])]
+    private bool $starterDone = false;
+
     public function __construct()
     {
         $this->createdAt = new \DateTime();
@@ -193,4 +196,7 @@ class User implements UserInterface, PasswordAuthenticatedUserInterface
     public function eraseCredentials(): void
     {
     }
+
+    public function isStarterDone(): bool { return $this->starterDone; }
+    public function setStarterDone(bool $v): self { $this->starterDone = $v; return $this; }
 }

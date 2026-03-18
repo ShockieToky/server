@@ -20,6 +20,8 @@ class ProtocoleAssautPassive implements PassiveInterface
         return 'protocole_assaut';
     }
 
+    public function thresholds(): array { return [2, 4, 6]; }
+
     public function apply(CombatContext $context): void
     {
         $count = $context->effectiveFactionCount();

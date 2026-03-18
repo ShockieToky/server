@@ -1,8 +1,7 @@
 <?php
 namespace App\Controller\Api;
 
-use App\Entity\Origine;
-use App\Repository\OrigineRepository;
+use App\Entity\Origine;use App\Passive\PassiveRegistry;use App\Repository\OrigineRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -94,12 +93,14 @@ class OrigineController extends AbstractController
 
     private function serialize(Origine $origine): array
     {
+        $passive = PassiveRegistry::get($origine->getPassiveName());
         return [
             'id'                 => $origine->getId(),
             'name'               => $origine->getName(),
             'description'        => $origine->getDescription(),
             'passiveName'        => $origine->getPassiveName(),
             'passiveDescription' => $origine->getPassiveDescription(),
+            'thresholds'         => $passive?->thresholds() ?? [],
         ];
     }
 }

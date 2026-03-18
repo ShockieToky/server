@@ -31,6 +31,18 @@ class HeroRepository extends ServiceEntityRepository
     //        ;
     //    }
 
+    /** @return Hero[] */
+    public function findByFactionAndRarity(\App\Entity\Faction $faction, int $rarity): array
+    {
+        return $this->createQueryBuilder('h')
+            ->andWhere('h.faction = :faction')
+            ->andWhere('h.rarity = :rarity')
+            ->setParameter('faction', $faction)
+            ->setParameter('rarity', $rarity)
+            ->getQuery()
+            ->getResult();
+    }
+
     public function save(Hero $hero, bool $flush = false): void
     {
         $this->getEntityManager()->persist($hero);

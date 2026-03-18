@@ -1,8 +1,7 @@
 <?php
 namespace App\Controller\Api;
 
-use App\Entity\Faction;
-use App\Repository\FactionRepository;
+use App\Entity\Faction;use App\Passive\PassiveRegistry;use App\Repository\FactionRepository;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -94,12 +93,14 @@ class FactionController extends AbstractController
 
     private function serialize(Faction $faction): array
     {
+        $passive = PassiveRegistry::get($faction->getPassiveName());
         return [
             'id'                 => $faction->getId(),
             'name'               => $faction->getName(),
             'description'        => $faction->getDescription(),
             'passiveName'        => $faction->getPassiveName(),
             'passiveDescription' => $faction->getPassiveDescription(),
+            'thresholds'         => $passive?->thresholds() ?? [],
         ];
     }
 }
