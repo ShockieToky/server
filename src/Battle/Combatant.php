@@ -96,15 +96,21 @@ class Combatant
     private const MAX_ACTIVE_EFFECTS = 10;
 
     /**
-     * Ajoute ou remplace un effet (pas de stack : renouvelle simplement la durée).
+     * Ajoute ou remplace un effet.
      * Règles :
-     *   - 'protection' bloque tous les effets négatifs.
+     *   - 'protection' bloque tous les effets négatifs de durée (les effets instantanés
+     *     comme Suppression contournent ce blocage car ils ne passent pas par applyEffect).
      *   - 'bloqueur' bloque tous les effets positifs.
+     *   - Les effets cumulables (brulure, recuperation) s'accumulent sans limite de stack
+     *     (uniquement plafonné par MAX_ACTIVE_EFFECTS).
+     *   - Les autres effets renouvellent simplement la durée (remplacement).
      *   - Plafond de 10 effets sur la durée simultanés.
-     *     Exception : si l'effet remplace un effet existant du même nom,
+     *     Exception : si un effet non-cumulable remplace un effet existant du même nom,
      *     le slot est libéré avant vérification du plafond (remplacement libre).
      * Retourne true si l'effet a été appliqué.
      */
+    private const STACKABLE_EFFECTS = ['brulure', 'recuperation'];
+
     public function applyEffect(ActiveEffect $effect): bool
     {
         if ($effect->polarity === 'negative' && $this->hasEffect('protection')) {
@@ -114,16 +120,22 @@ class Combatant
             return false;
         }
 
-        // Si l'effet existe déjà, on le retire avant de vérifier le plafond
-        // (renouvellement de durée ne consomme pas de slot supplémentaire).
-        $isRenewal = $this->hasEffect($effect->name);
-        if ($isRenewal) {
-            $this->removeEffect($effect->name);
-        }
+        $stackable = in_array($effect->name, self::STACKABLE_EFFECTS, true);
 
-        // Plafond : 10 effets de durée maximum.
-        if (!$isRenewal && count($this->activeEffects) >= self::MAX_ACTIVE_EFFECTS) {
-            return false;
+        if ($stackable) {
+            // Les effets cumulables s'empilent : on vérifie juste le plafond global.
+            if (count($this->activeEffects) >= self::MAX_ACTIVE_EFFECTS) {
+                return false;
+            }
+        } else {
+            // Comportement existant : renouvellement (remplace l'existant).
+            $isRenewal = $this->hasEffect($effect->name);
+            if ($isRenewal) {
+                $this->removeEffect($effect->name);
+            }
+            if (!$isRenewal && count($this->activeEffects) >= self::MAX_ACTIVE_EFFECTS) {
+                return false;
+            }
         }
 
         $this->activeEffects[] = $effect;
@@ -201,6 +213,11 @@ class Combatant
      */
     public function pickAttack(): ?Attack
     {
+        if ($this->hasEffect('provocation')) {
+            $slot1 = array_values(array_filter($this->attacks, fn(Attack $a) => $a->getSlotIndex() === 1));
+            return $slot1[0] ?? null;
+        }
+
         $silenced  = $this->hasEffect('silence');
         $available = array_filter(
             $this->attacks,

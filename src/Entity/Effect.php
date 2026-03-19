@@ -29,7 +29,7 @@ class Effect
         'aug_defense'    => ['Augmentation défense',  'duration', 'positive', 'Augmente la défense de la cible de X%',          40],
         'aug_vitesse'    => ['Augmentation vitesse',  'duration', 'positive', 'Augmente la vitesse de la cible de X%',           20],
         'aug_attaque'    => ['Augmentation attaque',  'duration', 'positive', "Augmente l'attaque de la cible de X%",            30],
-        'protection'     => ['Protection',            'duration', 'positive', 'Immunise aux effets négatifs',                   null],
+        'protection'     => ['Protection',            'duration', 'positive', 'Immunise aux effets négatifs (hors Suppression)',  null],
         'bouclier'       => ['Bouclier',              'duration', 'positive', 'Protège de X% des PV max',                       25],
         'recuperation'   => ['Récupération',          'duration', 'positive', 'Regagne X% des PV max à chaque début de tour',   10],
         'invincibilite'  => ['Invincibilité',         'duration', 'positive', 'La cible ne subit aucun dégât',                 null],
@@ -52,7 +52,8 @@ class Effect
         'ignore_defense' => ['Ignore défense',        'instant',  'positive', 'Ignore la défense de la cible pour ce hit',     null],
 
         // ── Effets instantanés — négatifs ─────────────────────────────────────
-        'suppression'    => ['Suppression',           'instant',  'negative', 'Supprime les effets bénéfiques de la cible',    null],
+        'suppression'         => ['Suppression',          'instant',  'negative', 'Supprime les effets bénéfiques de la cible',    null],
+        'activation_brulure'  => ['Activation brûlure',   'instant',  'negative', 'Fait proc toutes les brûlures de la cible (dégâts sans réduire la durée)', null],
 
         // ── Effets instantanés — bénéfiques (suite) ───────────────────────────
         'vampirisme'     => ['Vampirisme',            'instant',  'positive', 'Le lanceur récupère X% des dégâts infligés par ce hit comme PV', 15],

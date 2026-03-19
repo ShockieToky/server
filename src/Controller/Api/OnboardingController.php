@@ -77,15 +77,22 @@ class OnboardingController extends AbstractController
         $heroes2 = $this->heroRepository->findByFactionAndRarity($faction, 2);
         $heroes3 = $this->heroRepository->findByFactionAndRarity($faction, 3);
 
-        if (count($heroes2) === 0 || count($heroes3) === 0) {
+        $missing2 = max(0, 2 - count($heroes2));
+        if (count($heroes2) === 0 && count($heroes3) < 4) {
             return $this->json(
-                ['message' => 'Cette faction ne possède pas assez de héros (2★ et 3★ requis).'],
+                ['message' => 'Cette faction ne possède pas assez de héros (au moins 1×2★ ou 4×3★ requis).'],
+                Response::HTTP_UNPROCESSABLE_ENTITY
+            );
+        }
+        if (count($heroes3) < 2 + $missing2) {
+            return $this->json(
+                ['message' => 'Cette faction ne possède pas assez de héros 3★.'],
                 Response::HTTP_UNPROCESSABLE_ENTITY
             );
         }
 
         $picked2 = $this->pickRandom($heroes2, 2);
-        $picked3 = $this->pickRandom($heroes3, 2);
+        $picked3 = $this->pickRandom($heroes3, 2 + $missing2);
 
         $userHeroes = [];
         foreach (array_merge($picked2, $picked3) as $hero) {

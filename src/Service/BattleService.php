@@ -267,8 +267,9 @@ class BattleService
 
     private function processTurnStartEffects(Combatant $actor, array &$log): void
     {
-        // Brûlure : X% des PV max en dégâts
-        if ($e = $actor->getEffect('brulure')) {
+        // Brûlure : X% des PV max en dégâts (cumulable — on applique chaque instance)
+        $burns = array_filter($actor->activeEffects, fn($e) => $e->name === 'brulure');
+        foreach ($burns as $e) {
             $dmg = (int) ceil($actor->maxHp * $e->value / 100.0);
             $actual = $actor->takeDamage($dmg);
             $log[] = new TurnEntry('effect_tick', $actor->id, $actor->name, data: [
@@ -282,8 +283,9 @@ class BattleService
             }
         }
 
-        // Récupération : X% des PV max soignés
-        if ($e = $actor->getEffect('recuperation')) {
+        // Récupération : X% des PV max soignés (cumulable — on applique chaque instance)
+        $regens = array_filter($actor->activeEffects, fn($e) => $e->name === 'recuperation');
+        foreach ($regens as $e) {
             $heal = (int) ceil($actor->maxHp * $e->value / 100.0);
             $actual = $actor->heal($heal);
             $log[] = new TurnEntry('effect_tick', $actor->id, $actor->name, data: [
@@ -532,6 +534,7 @@ class BattleService
                     polarity:       $effect->getPolarity(),
                     remainingTurns: $duration ?? 1,
                     value:          (float) $value,
+                    sourceId:       $effectName === 'provocation' ? $actor->id : '',
                     shieldHp:       $effectName === 'bouclier'
                         ? $et->maxHp * (float) $value / 100.0
                         : 0.0,
@@ -587,6 +590,21 @@ class BattleService
                     'label'    => 'Suppression',
                     'polarity' => 'negative',
                 ]);
+                break;
+
+            case 'activation_brulure':
+                if ($e = $target->getEffect('brulure')) {
+                    $dmg    = (int) ceil($target->maxHp * $e->value / 100.0);
+                    $actual = $target->takeDamage($dmg);
+                    $log[]  = new TurnEntry('effect_tick', $target->id, $target->name, data: [
+                        'effect'  => 'brulure',
+                        'damage'  => $actual,
+                        'hpLeft'  => $target->currentHp,
+                    ]);
+                    if (!$target->isAlive()) {
+                        $log[] = new TurnEntry('death', $target->id, $target->name);
+                    }
+                }
                 break;
         }
     }
@@ -694,6 +712,13 @@ class BattleService
      */
     private function findProvoker(Combatant $actor, array $foes): ?Combatant
     {
+        $sourceId = $actor->getEffect('provocation')?->sourceId ?? '';
+        if ($sourceId !== '') {
+            foreach ($foes as $foe) {
+                if ($foe->id === $sourceId) return $foe;
+            }
+        }
+        // Fallback : ennemi avec le moins de PV
         return !empty($foes)
             ? array_reduce($foes, fn($c, $m) => $c === null || $m->currentHp < $c->currentHp ? $m : $c)
             : null;
@@ -1129,9 +1154,17 @@ class BattleService
 
         // ── Trouver l'attaque choisie ─────────────────────────────────────────
         $attack = null;
-        if ($attackId !== null) {
+        // Provocation : force le slot 1 (la cible sera forcée par selectTargets)
+        if ($actor->hasEffect('provocation')) {
+            $slot1  = array_values(array_filter($actor->attacks, fn($a) => $a->getSlotIndex() === 1));
+            $attack = $slot1[0] ?? $actor->pickAttack();
+        } elseif ($attackId !== null) {
+            $silenced = $actor->hasEffect('silence');
             foreach ($actor->attacks as $a) {
-                if ($a->getId() === $attackId && ($actor->cooldowns[$attackId] ?? 0) === 0) {
+                if ($a->getId() === $attackId
+                    && ($actor->cooldowns[$attackId] ?? 0) === 0
+                    && (!$silenced || $a->getSlotIndex() === 1)
+                ) {
                     $attack = $a;
                     break;
                 }
@@ -1156,7 +1189,7 @@ class BattleService
         $targets = $this->selectTargets($actor, $attack, $allies, $foes);
 
         // ── Override cible manuelle ───────────────────────────────────────────
-        if ($forcedTargetId !== null) {
+        if ($forcedTargetId !== null && !$actor->hasEffect('provocation')) {
             $manualTargetTypes = ['single_enemy', 'random_enemy', 'single_ally', 'random_ally'];
             if (in_array($attack->getTargetType(), $manualTargetTypes, true)) {
                 $allCombatants = array_merge($heroes, $enemies);

@@ -52,7 +52,12 @@ class AttackAdminController extends AbstractController
     {
         $created = 0;
         foreach (Effect::CATALOGUE as $name => $meta) {
-            if ($this->effectRepository->findByName($name)) continue;
+            $existing = $this->effectRepository->findByName($name);
+            if ($existing) {
+                // Met à jour la description pour les effets déjà existants
+                $existing->setDescription($meta[3]);
+                continue;
+            }
             $e = new Effect();
             $e->setName($name);
             $e->setLabel($meta[0]);

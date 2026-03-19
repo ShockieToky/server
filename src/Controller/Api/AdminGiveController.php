@@ -15,6 +15,8 @@ use App\Repository\UserHeroRepository;
 use App\Repository\UserInventoryRepository;
 use App\Repository\UserRepository;
 use App\Repository\UserStoryProgressRepository;
+use App\Repository\UserDungeonProgressRepository;
+use App\Repository\ShopPurchaseRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -48,8 +50,10 @@ class AdminGiveController extends AbstractController
         private readonly UserExtensionRepository $userExtensionRepository,
         private readonly UserHeroRepository      $userHeroRepository,
         private readonly UserInventoryRepository      $inventoryRepository,
-        private readonly UserStoryProgressRepository  $storyProgressRepository,
-        private readonly EntityManagerInterface       $em,
+        private readonly UserStoryProgressRepository   $storyProgressRepository,
+        private readonly UserDungeonProgressRepository  $dungeonProgressRepository,
+        private readonly ShopPurchaseRepository          $shopPurchaseRepository,
+        private readonly EntityManagerInterface         $em,
     ) {
     }
 
@@ -192,9 +196,9 @@ class AdminGiveController extends AbstractController
         }
 
         $data  = json_decode($request->getContent(), true) ?? [];
-        $scope = $data['scope'] ?? ['heroes', 'inventory', 'extensions', 'starter', 'story', 'gold', 'history_token'];
+        $scope = $data['scope'] ?? ['heroes', 'inventory', 'extensions', 'starter', 'story', 'dungeon', 'shop', 'gold', 'history_token'];
         if (empty($scope)) {
-            $scope = ['heroes', 'inventory', 'extensions', 'starter', 'story', 'gold', 'history_token'];
+            $scope = ['heroes', 'inventory', 'extensions', 'starter', 'story', 'dungeon', 'shop', 'gold', 'history_token'];
         }
 
         $done = [];
@@ -231,6 +235,20 @@ class AdminGiveController extends AbstractController
                 $this->em->remove($p);
             }
             $done[] = 'progression histoire';
+        }
+
+        if (in_array('dungeon', $scope, true)) {
+            foreach ($this->dungeonProgressRepository->findByUser($user) as $p) {
+                $this->em->remove($p);
+            }
+            $done[] = 'progression donjon';
+        }
+
+        if (in_array('shop', $scope, true)) {
+            foreach ($this->shopPurchaseRepository->findBy(['user' => $user]) as $p) {
+                $this->em->remove($p);
+            }
+            $done[] = 'limites boutique';
         }
 
         if (in_array('gold', $scope, true)) {

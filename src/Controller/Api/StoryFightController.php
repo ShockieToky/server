@@ -87,44 +87,47 @@ class StoryFightController extends AbstractController
         $heroCombatants = [];
         $maxFoeAccDebuff = 0; // collecte du max foesAccuracyDebuffPct de l'équipe
 
+        // Pré-calcul des passifs d'origine : chaque origine active bénéficie à toute l'équipe
+        $teamOrigineCtx = new CombatContext();
+        $seenOrigineIds  = [];
+        foreach ($selectedUserHeroes as $uh) {
+            $orig = $uh->getHero()->getOrigine();
+            if ($orig === null || in_array($orig->getId(), $seenOrigineIds, true)) continue;
+            $seenOrigineIds[] = $orig->getId();
+            $origCount = count(array_filter($selectedUserHeroes, fn($u) => $u->getHero()->getOrigine()?->getId() === $orig->getId()));
+            $tmpCtx = new CombatContext();
+            $tmpCtx->alliedOrigineCount = $origCount;
+            if ($bonusOrigineId > 0 && $orig->getId() === $bonusOrigineId) {
+                $tmpCtx->playerOrigineBonus = 1;
+            }
+            $this->bonusResolver->applyOriginePassive($orig, $tmpCtx);
+            $teamOrigineCtx->applyFrom($tmpCtx);
+        }
+        if (isset($teamOrigineCtx->passiveTraits['enclave_bonus_pct'])) {
+            $teamOrigineCtx->passiveTraits['enclave_direction'] = $enclaveDirection;
+        }
+
         foreach ($selectedUserHeroes as $i => $userHero) {
             $hero    = $userHero->getHero();
             $attacks = $this->attackRepository->findByHero($hero);
 
-            // Passifs faction + origine
+            // Passifs faction (per-hero) + origine (équipe complète pré-calculé)
             $ctx = new CombatContext();
-            if ($hero->getFaction() !== null || $hero->getOrigine() !== null) {
-                // Compte des alliés de même faction/origine dans l'équipe
-                foreach ($selectedUserHeroes as $j => $other) {
-                    if ($j === $i) continue;
+            if ($hero->getFaction() !== null) {
+                // Compte des héros de même faction dans l'équipe (héros lui-même inclus)
+                foreach ($selectedUserHeroes as $other) {
                     $otherHero = $other->getHero();
-                    if ($hero->getFaction() && $otherHero->getFaction()?->getId() === $hero->getFaction()->getId()) {
+                    if ($otherHero->getFaction()?->getId() === $hero->getFaction()->getId()) {
                         $ctx->alliedFactionCount++;
                     }
-                    if ($hero->getOrigine() && $otherHero->getOrigine()?->getId() === $hero->getOrigine()->getId()) {
-                        $ctx->alliedOrigineCount++;
-                    }
                 }
-                // Bonus joueur (faction / origine sélectionnée en lobby)
                 if ($bonusFactionId > 0 && $hero->getFaction()?->getId() === $bonusFactionId) {
                     $ctx->playerFactionBonus = 2;
                 }
-                if ($bonusOrigineId > 0 && $hero->getOrigine()?->getId() === $bonusOrigineId) {
-                    $ctx->playerOrigineBonus = 1;
-                }
-
-                if ($hero->getFaction() !== null && $hero->getOrigine() !== null) {
-                    $this->bonusResolver->applyAll($hero->getFaction(), $hero->getOrigine(), $ctx);
-                } elseif ($hero->getFaction() !== null) {
-                    $this->bonusResolver->applyFactionPassive($hero->getFaction(), $ctx);
-                } elseif ($hero->getOrigine() !== null) {
-                    $this->bonusResolver->applyOriginePassive($hero->getOrigine(), $ctx);
-                }
-                // Propagation de la direction Enclave si le passif est actif
-                if (isset($ctx->passiveTraits['enclave_bonus_pct'])) {
-                    $ctx->passiveTraits['enclave_direction'] = $enclaveDirection;
-                }
+                $this->bonusResolver->applyFactionPassive($hero->getFaction(), $ctx);
             }
+            // Passifs d'origine : s'appliquent à tous les héros (pré-calculés)
+            $ctx->applyFrom($teamOrigineCtx);
 
             // Stats finales (base × passifs)
             $combatant = new Combatant(
@@ -148,7 +151,7 @@ class StoryFightController extends AbstractController
             if ($ctx->initialShieldPct > 0.0) {
                 $shieldHp = $combatant->maxHp * $ctx->initialShieldPct / 100.0;
                 $combatant->applyEffect(new ActiveEffect(
-                    'bouclier', 'Bouclier initial', 'positive', 999, $ctx->initialShieldPct, $shieldHp
+                    'bouclier', 'Bouclier initial', 'positive', 999, $ctx->initialShieldPct, shieldHp: $shieldHp
                 ));
             }
 

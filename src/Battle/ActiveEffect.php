@@ -21,6 +21,8 @@ class ActiveEffect
         public int $remainingTurns,
         /** Valeur numérique (%, flat…). Ex: 30.0 pour 30% d'attaque en plus. */
         public readonly float $value,
+        /** ID du combattant source (utilisé par la provocation pour identifier le lanceur). */
+        public readonly string $sourceId = '',
         /** PV de bouclier restants (uniquement pour l'effet 'bouclier'). */
         public float $shieldHp = 0.0,
         /**

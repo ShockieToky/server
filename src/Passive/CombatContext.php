@@ -86,4 +86,33 @@ class CombatContext
     {
         return $this->alliedOrigineCount + $this->playerOrigineBonus;
     }
+
+    /**
+     * Fusionne les bonus d'un contexte source dans celui-ci.
+     * Utilisé pour appliquer les passifs d'origine d'équipe à tous les héros.
+     */
+    public function applyFrom(CombatContext $src): void
+    {
+        $this->attackMultiplier   += ($src->attackMultiplier  - 1.0);
+        $this->defenseMultiplier  += ($src->defenseMultiplier - 1.0);
+        $this->speedMultiplier    += ($src->speedMultiplier   - 1.0);
+        $this->healingMultiplier  += ($src->healingMultiplier - 1.0);
+        $this->critChanceBonus    += $src->critChanceBonus;
+        $this->critDamageBonus    += $src->critDamageBonus;
+        $this->flatSpeedBonus     += $src->flatSpeedBonus;
+        $this->resistanceBonus    += $src->resistanceBonus;
+        $this->foesAccuracyDebuffPct = max($this->foesAccuracyDebuffPct, $src->foesAccuracyDebuffPct);
+        $this->damageReductionPct    = max($this->damageReductionPct,    $src->damageReductionPct);
+        $this->initialShieldPct      = max($this->initialShieldPct,      $src->initialShieldPct);
+        foreach ($src->passiveTraits as $key => $value) {
+            if (!isset($this->passiveTraits[$key])) {
+                $this->passiveTraits[$key] = $value;
+            } elseif (is_numeric($value)) {
+                $this->passiveTraits[$key] = max($this->passiveTraits[$key], $value);
+            }
+        }
+        foreach ($src->activeEffects as $effect) {
+            $this->activeEffects[] = $effect;
+        }
+    }
 }

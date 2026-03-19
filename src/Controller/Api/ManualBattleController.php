@@ -230,6 +230,26 @@ class ManualBattleController extends AbstractController
             if ($hero !== null) $heroEntities[] = [$hero, $cfg];
         }
 
+        // Pré-calcul des passifs d'origine : chaque origine active bénéficie à toute l'équipe
+        $teamOrigineCtx = new CombatContext();
+        $seenOrigineIds  = [];
+        foreach ($heroEntities as [$hero2, $_]) {
+            $orig = $hero2->getOrigine();
+            if ($orig === null || in_array($orig->getId(), $seenOrigineIds, true)) continue;
+            $seenOrigineIds[] = $orig->getId();
+            $origCount = count(array_filter($heroEntities, fn($pair) => $pair[0]->getOrigine()?->getId() === $orig->getId()));
+            $tmpCtx = new CombatContext();
+            $tmpCtx->alliedOrigineCount = $origCount;
+            if ($leaderOrigineId > 0 && $orig->getId() === $leaderOrigineId) {
+                $tmpCtx->playerOrigineBonus = 1;
+            }
+            $this->bonusResolver->applyOriginePassive($orig, $tmpCtx);
+            $teamOrigineCtx->applyFrom($tmpCtx);
+        }
+        if (isset($teamOrigineCtx->passiveTraits['enclave_bonus_pct'])) {
+            $teamOrigineCtx->passiveTraits['enclave_direction'] = $enclaveDirection;
+        }
+
         foreach ($heroEntities as $i => [$hero, $cfg]) {
             /** @var Hero $hero */
             $attacks = $this->attackRepository->findByHero($hero);
@@ -238,17 +258,14 @@ class ManualBattleController extends AbstractController
             $ctx = new CombatContext();
             $ctx->heroIndex = $i;
             $ctx->teamSize  = count($heroEntities);
-            foreach ($heroEntities as $j => [$other, $_]) {
-                if ($j === $i) continue;
+            foreach ($heroEntities as [$other, $_]) {
                 /** @var Hero $other */
                 if ($hero->getFaction() && $other->getFaction()?->getId() === $hero->getFaction()->getId()) $ctx->alliedFactionCount++;
-                if ($hero->getOrigine() && $other->getOrigine()?->getId() === $hero->getOrigine()->getId()) $ctx->alliedOrigineCount++;
             }
             if ($leaderFactionId > 0 && $hero->getFaction()?->getId() === $leaderFactionId) $ctx->playerFactionBonus = 2;
-            if ($leaderOrigineId > 0 && $hero->getOrigine()?->getId() === $leaderOrigineId) $ctx->playerOrigineBonus = 1;
             if ($hero->getFaction() !== null) $this->bonusResolver->applyFactionPassive($hero->getFaction(), $ctx);
-            if ($hero->getOrigine()  !== null) $this->bonusResolver->applyOriginePassive($hero->getOrigine(), $ctx);
-            if (isset($ctx->passiveTraits['enclave_bonus_pct'])) $ctx->passiveTraits['enclave_direction'] = $enclaveDirection;
+            // Passifs d'origine : s'appliquent à tous les héros (pré-calculés)
+            $ctx->applyFrom($teamOrigineCtx);
 
             $hp         = max(1, (int) round($hero->getHp()      * (1 + $ext['hpPct']  / 100.0)));
             $attack     = max(1, (int) round($hero->getAttack()   * (1 + $ext['atkPct'] / 100.0) * $ctx->attackMultiplier));
@@ -279,7 +296,7 @@ class ManualBattleController extends AbstractController
 
             if ($ctx->initialShieldPct > 0.0) {
                 $shieldHp = $hp * $ctx->initialShieldPct / 100.0;
-                $combatant->applyEffect(new ActiveEffect('bouclier', 'Bouclier initial', 'positive', 999, $ctx->initialShieldPct, $shieldHp));
+                $combatant->applyEffect(new ActiveEffect('bouclier', 'Bouclier initial', 'positive', 999, $ctx->initialShieldPct, shieldHp: $shieldHp));
             }
 
             $combatant->passiveTraits['_factionName'] = $hero->getFaction()?->getName();
@@ -324,9 +341,11 @@ class ManualBattleController extends AbstractController
                 name:           (string) $eff['name'],
                 label:          (string) $eff['label'],
                 polarity:       (string) $eff['polarity'],
-                remainingTurns: (int) $eff['remainingTurns'],
-                value:          (float) $eff['value'],
-                shieldHp:       (float) ($eff['shieldHp'] ?? 0.0),
+                remainingTurns: (int)    $eff['remainingTurns'],
+                value:          (float)  $eff['value'],
+                sourceId:       (string) ($eff['sourceId'] ?? ''),
+                shieldHp:       (float)  ($eff['shieldHp'] ?? 0.0),
+                fresh:          false,
             );
         }
 
@@ -420,6 +439,7 @@ class ManualBattleController extends AbstractController
                 'polarity'       => $e->polarity,
                 'remainingTurns' => $e->remainingTurns,
                 'value'          => $e->value,
+                'sourceId'       => $e->sourceId,
                 'shieldHp'       => $e->shieldHp,
             ], $c->activeEffects),
             'cooldowns'        => $c->cooldowns,

@@ -10,9 +10,9 @@ use App\Passive\PassiveInterface;
  *
  * Proc post-attaque : chance d'infliger brûlure 1 tour.
  * Les brûlures sont plus efficaces (+ bonus % sur les dégâts par tour).
- *   1 : 20 % chance, brûlure +1 %
- *   3 : 30 % chance, brûlure +2 %
- *   6 : 50 % chance, brûlure +3 %
+ *   1 : 20 % chance, brûlure +2 %
+ *   3 : 30 % chance, brûlure +4 %
+ *   6 : 50 % chance, brûlure +6 %
  */
 class FireOrderPassive implements PassiveInterface
 {
@@ -25,9 +25,9 @@ class FireOrderPassive implements PassiveInterface
         if ($count < 1) return;
 
         [$chance, $bonus] = match (true) {
-            $count >= 6 => [50, 3.0],
-            $count >= 3 => [30, 2.0],
-            default     => [20, 1.0],
+            $count >= 6 => [50, 6.0],
+            $count >= 3 => [30, 4.0],
+            default     => [20, 2.0],
         };
 
         $context->passiveTraits['fire_proc_chance']    = $chance;
