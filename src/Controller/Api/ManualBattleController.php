@@ -305,6 +305,8 @@ class ManualBattleController extends AbstractController
             $combatants[] = $combatant;
         }
 
+        $this->bonusResolver->redistributeDinoTrait($combatants);
+
         return $combatants;
     }
 

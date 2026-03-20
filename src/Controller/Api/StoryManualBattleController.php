@@ -463,6 +463,8 @@ class StoryManualBattleController extends AbstractController
             $heroCombatants[] = $combatant;
         }
 
+        $this->bonusResolver->redistributeDinoTrait($heroCombatants);
+
         return [$heroCombatants, $maxFoeAccDebuff];
     }
 

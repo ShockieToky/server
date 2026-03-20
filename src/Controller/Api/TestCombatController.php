@@ -219,6 +219,8 @@ class TestCombatController extends AbstractController
             ];
         }
 
+        $this->bonusResolver->redistributeDinoTrait($combatants);
+
         return [$combatants, $initStats];
     }
 

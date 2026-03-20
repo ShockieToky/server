@@ -53,5 +53,27 @@ class BonusResolverService
         $this->applyFactionPassive($faction, $context);
         $this->applyOriginePassive($origine, $context);
     }
+
+    /**
+     * Déplace le trait dino_tier vers le dernier héros de l'équipe.
+     * À appeler après avoir construit tous les Combatants héros.
+     *
+     * @param \App\Battle\Combatant[] $combatants
+     */
+    public function redistributeDinoTrait(array $combatants): void
+    {
+        if (empty($combatants)) return;
+
+        $maxTier = 0;
+        foreach ($combatants as $c) {
+            $tier = (int) ($c->passiveTraits['dino_tier'] ?? 0);
+            if ($tier > $maxTier) $maxTier = $tier;
+            unset($c->passiveTraits['dino_tier']);
+        }
+
+        if ($maxTier > 0) {
+            $combatants[count($combatants) - 1]->passiveTraits['dino_tier'] = $maxTier;
+        }
+    }
 }
 

@@ -163,6 +163,8 @@ class StoryFightController extends AbstractController
             $heroCombatants[] = $combatant;
         }
 
+        $this->bonusResolver->redistributeDinoTrait($heroCombatants);
+
         // ── Construction des vagues ennemies ──────────────────────────────────
         $waves = [];
         foreach ($stage->getWaves() as $wave) {

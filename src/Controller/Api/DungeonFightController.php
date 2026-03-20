@@ -156,6 +156,8 @@ class DungeonFightController extends AbstractController
             $heroCombatants[] = $combatant;
         }
 
+        $this->bonusResolver->redistributeDinoTrait($heroCombatants);
+
         // ── Construction des vagues ennemies (IA avancée) ─────────────────────
         $waves = [];
         foreach ($dungeon->getWaves() as $wave) {

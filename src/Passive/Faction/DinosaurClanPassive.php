@@ -31,9 +31,8 @@ class DinosaurClanPassive implements PassiveInterface
         $count = $context->effectiveFactionCount();
         if ($count < 1) return;
 
-        // Seul le héros le plus à droite (dernier de l'équipe) reçoit le dino.
-        if ($context->heroIndex !== $context->teamSize - 1) return;
-
+        // dino_tier est posé sur chaque héros du clan ; BonusResolverService::redistributeDinoTrait
+        // le déplace ensuite sur le dernier héros de l'équipe (peu importe sa faction).
         $tier = match (true) {
             $count >= 6 => 3,
             $count >= 3 => 2,
