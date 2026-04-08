@@ -15,8 +15,8 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'shop_item')]
 class ShopItem
 {
-    public const REWARD_TYPES = ['gold', 'history_token', 'item', 'scroll', 'hero'];
-    public const COST_TYPES   = ['gold', 'history_token', 'item', 'scroll'];
+    public const REWARD_TYPES = ['gold', 'history_token', 'item', 'scroll', 'hero', 'event_currency'];
+    public const COST_TYPES   = ['gold', 'history_token', 'item', 'scroll', 'event_currency'];
     public const PERIODS      = ['daily', 'weekly'];
 
     #[ORM\Id]
@@ -71,6 +71,15 @@ class ShopItem
     #[ORM\ManyToOne]
     #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
     private ?Scroll $costScroll = null;
+
+    /** Rempli si costType = 'event_currency' ou rewardType = 'event_currency'. */
+    #[ORM\ManyToOne(targetEntity: EventCurrency::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?EventCurrency $costEventCurrency = null;
+
+    #[ORM\ManyToOne(targetEntity: EventCurrency::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?EventCurrency $rewardEventCurrency = null;
 
     // ── Limites d'achat ───────────────────────────────────────────────────────
 
@@ -133,6 +142,12 @@ class ShopItem
 
     public function getCostScroll(): ?Scroll { return $this->costScroll; }
     public function setCostScroll(?Scroll $v): self { $this->costScroll = $v; return $this; }
+
+    public function getCostEventCurrency(): ?EventCurrency { return $this->costEventCurrency; }
+    public function setCostEventCurrency(?EventCurrency $v): self { $this->costEventCurrency = $v; return $this; }
+
+    public function getRewardEventCurrency(): ?EventCurrency { return $this->rewardEventCurrency; }
+    public function setRewardEventCurrency(?EventCurrency $v): self { $this->rewardEventCurrency = $v; return $this; }
 
     public function getLimitPerAccount(): ?int { return $this->limitPerAccount; }
     public function setLimitPerAccount(?int $v): self { $this->limitPerAccount = $v; return $this; }

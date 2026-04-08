@@ -45,11 +45,11 @@ class ScrollPullService
     private function drawOne(Scroll $scroll): Hero
     {
         $rarity = $this->pickRarity($scroll);
-        $pool   = $this->heroRepository->findBy(['rarity' => $rarity]);
+        $pool   = $this->heroRepository->findBy(['rarity' => $rarity, 'scrollObtainable' => true]);
 
         if (empty($pool)) {
-            // Fallback: any hero in the database
-            $pool = $this->heroRepository->findAll();
+            // Fallback: any obtainable hero in the database
+            $pool = $this->heroRepository->findBy(['scrollObtainable' => true]);
             if (empty($pool)) {
                 throw new \RuntimeException('No heroes available in the database');
             }

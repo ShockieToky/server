@@ -102,8 +102,7 @@ class HeroController extends AbstractController
         if (isset($data['critRate']))    $hero->setCritRate((int) $data['critRate']);
         if (isset($data['critDamage']))  $hero->setCritDamage((int) $data['critDamage']);
         if (isset($data['accuracy']))    $hero->setAccuracy((int) $data['accuracy']);
-        if (isset($data['resistance']))  $hero->setResistance((int) $data['resistance']);
-
+        if (isset($data['resistance']))  $hero->setResistance((int) $data['resistance']);        if (array_key_exists('scrollObtainable', $data)) $hero->setScrollObtainable((bool) $data['scrollObtainable']);
         if (array_key_exists('factionId', $data)) {
             $hero->setFaction($data['factionId'] ? $this->factionRepository->find((int) $data['factionId']) : null);
         }
@@ -131,6 +130,7 @@ class HeroController extends AbstractController
             'critDamage'  => $hero->getCritDamage(),
             'accuracy'    => $hero->getAccuracy(),
             'resistance'  => $hero->getResistance(),
+            'scrollObtainable' => $hero->isScrollObtainable(),
             'faction'     => $faction ? ['id' => $faction->getId(), 'name' => $faction->getName()] : null,
             'origine'     => $origine ? ['id' => $origine->getId(), 'name' => $origine->getName()] : null,
         ];

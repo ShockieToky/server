@@ -7,6 +7,7 @@ use App\Entity\DungeonReward;
 use App\Entity\DungeonWave;
 use App\Entity\DungeonWaveMonster;
 use App\Repository\DungeonRepository;
+use App\Repository\EventCurrencyRepository;
 use App\Repository\ItemRepository;
 use App\Repository\MonsterRepository;
 use App\Repository\ScrollRepository;
@@ -31,11 +32,12 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 class DungeonAdminController extends AbstractController
 {
     public function __construct(
-        private readonly DungeonRepository      $dungeonRepository,
-        private readonly MonsterRepository      $monsterRepository,
-        private readonly ItemRepository         $itemRepository,
-        private readonly ScrollRepository       $scrollRepository,
-        private readonly EntityManagerInterface $em,
+        private readonly DungeonRepository       $dungeonRepository,
+        private readonly MonsterRepository       $monsterRepository,
+        private readonly ItemRepository          $itemRepository,
+        private readonly ScrollRepository        $scrollRepository,
+        private readonly EventCurrencyRepository $currencyRepository,
+        private readonly EntityManagerInterface  $em,
     ) {}
 
     #[Route('/api/admin/dungeons', name: 'api_admin_dungeons_list', methods: ['GET'])]
@@ -138,6 +140,9 @@ class DungeonAdminController extends AbstractController
             if ($rData['rewardType'] === 'scroll' && !empty($rData['scrollId'])) {
                 $reward->setScroll($this->scrollRepository->find((int) $rData['scrollId']));
             }
+            if ($rData['rewardType'] === 'event_currency' && !empty($rData['eventCurrencyId'])) {
+                $reward->setEventCurrency($this->currencyRepository->find((int) $rData['eventCurrencyId']));
+            }
             $dungeon->addReward($reward);
             $this->em->persist($reward);
         }
@@ -175,10 +180,13 @@ class DungeonAdminController extends AbstractController
                 'quantityMin' => $r->getQuantityMin(),
                 'quantityMax' => $r->getQuantityMax(),
                 'dropChance'  => $r->getDropChance(),
-                'itemId'      => $r->getItem()?->getId(),
-                'itemName'    => $r->getItem()?->getName(),
-                'scrollId'    => $r->getScroll()?->getId(),
-                'scrollName'  => $r->getScroll()?->getName(),
+                'itemId'            => $r->getItem()?->getId(),
+                'itemName'          => $r->getItem()?->getName(),
+                'scrollId'          => $r->getScroll()?->getId(),
+                'scrollName'        => $r->getScroll()?->getName(),
+                'eventCurrencyId'   => $r->getEventCurrency()?->getId(),
+                'eventCurrencyName' => $r->getEventCurrency()?->getName(),
+                'eventCurrencyIcon' => $r->getEventCurrency()?->getIcon(),
             ], $d->getRewards()->toArray());
         }
 

@@ -3,6 +3,7 @@
 namespace App\Controller\Api;
 
 use App\Entity\ShopItem;
+use App\Repository\EventCurrencyRepository;
 use App\Repository\HeroRepository;
 use App\Repository\ItemRepository;
 use App\Repository\ScrollRepository;
@@ -28,11 +29,12 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
 class ShopAdminController extends AbstractController
 {
     public function __construct(
-        private readonly ShopItemRepository     $shopItemRepository,
-        private readonly ItemRepository         $itemRepository,
-        private readonly ScrollRepository       $scrollRepository,
-        private readonly HeroRepository         $heroRepository,
-        private readonly EntityManagerInterface $em,
+        private readonly ShopItemRepository      $shopItemRepository,
+        private readonly ItemRepository          $itemRepository,
+        private readonly ScrollRepository        $scrollRepository,
+        private readonly HeroRepository          $heroRepository,
+        private readonly EventCurrencyRepository $currencyRepository,
+        private readonly EntityManagerInterface  $em,
     ) {}
 
     #[Route('/api/admin/shop-items', name: 'api_admin_shop_items_list', methods: ['GET'])]
@@ -105,6 +107,7 @@ class ShopAdminController extends AbstractController
         $s->setRewardItem(null);
         $s->setRewardScroll(null);
         $s->setRewardHero(null);
+        $s->setRewardEventCurrency(null);
         if ($s->getRewardType() === 'item' && !empty($data['rewardItemId'])) {
             $s->setRewardItem($this->itemRepository->find((int) $data['rewardItemId']));
         }
@@ -113,6 +116,9 @@ class ShopAdminController extends AbstractController
         }
         if ($s->getRewardType() === 'hero' && !empty($data['rewardHeroId'])) {
             $s->setRewardHero($this->heroRepository->find((int) $data['rewardHeroId']));
+        }
+        if ($s->getRewardType() === 'event_currency' && !empty($data['rewardEventCurrencyId'])) {
+            $s->setRewardEventCurrency($this->currencyRepository->find((int) $data['rewardEventCurrencyId']));
         }
 
         // Coût
@@ -123,11 +129,15 @@ class ShopAdminController extends AbstractController
 
         $s->setCostItem(null);
         $s->setCostScroll(null);
+        $s->setCostEventCurrency(null);
         if ($s->getCostType() === 'item' && !empty($data['costItemId'])) {
             $s->setCostItem($this->itemRepository->find((int) $data['costItemId']));
         }
         if ($s->getCostType() === 'scroll' && !empty($data['costScrollId'])) {
             $s->setCostScroll($this->scrollRepository->find((int) $data['costScrollId']));
+        }
+        if ($s->getCostType() === 'event_currency' && !empty($data['costEventCurrencyId'])) {
+            $s->setCostEventCurrency($this->currencyRepository->find((int) $data['costEventCurrencyId']));
         }
 
         // Limites
@@ -161,6 +171,9 @@ class ShopAdminController extends AbstractController
             'rewardScrollName' => $s->getRewardScroll()?->getName(),
             'rewardHeroId'   => $s->getRewardHero()?->getId(),
             'rewardHeroName' => $s->getRewardHero()?->getName(),
+            'rewardEventCurrencyId'   => $s->getRewardEventCurrency()?->getId(),
+            'rewardEventCurrencyName' => $s->getRewardEventCurrency()?->getName(),
+            'rewardEventCurrencyIcon' => $s->getRewardEventCurrency()?->getIcon(),
             // Coût
             'costType'       => $s->getCostType(),
             'costQuantity'   => $s->getCostQuantity(),
@@ -168,6 +181,9 @@ class ShopAdminController extends AbstractController
             'costItemName'   => $s->getCostItem()?->getName(),
             'costScrollId'   => $s->getCostScroll()?->getId(),
             'costScrollName' => $s->getCostScroll()?->getName(),
+            'costEventCurrencyId'   => $s->getCostEventCurrency()?->getId(),
+            'costEventCurrencyName' => $s->getCostEventCurrency()?->getName(),
+            'costEventCurrencyIcon' => $s->getCostEventCurrency()?->getIcon(),
             // Limites
             'limitPerAccount' => $s->getLimitPerAccount(),
             'limitPeriod'     => $s->getLimitPeriod(),

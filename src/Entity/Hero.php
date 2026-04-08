@@ -28,9 +28,13 @@ class Hero
     #[ORM\Column(type: 'text', nullable: true)]
     private ?string $description = null;
 
-    /** 1 to 5 */
+    /** 1 to 6 */
     #[ORM\Column(type: 'smallint')]
     private int $rarity = 1;
+
+    /** Si false, ce héros n'apparaît pas dans les tirages de parchemins (exclusif). */
+    #[ORM\Column(options: ['default' => true])]
+    private bool $scrollObtainable = true;
 
     /** attack | defense | support */
     #[ORM\Column(length: 10)]
@@ -77,7 +81,10 @@ class Hero
     public function setDescription(?string $description): self { $this->description = $description; return $this; }
 
     public function getRarity(): int { return $this->rarity; }
-    public function setRarity(int $rarity): self { $this->rarity = max(1, min(5, $rarity)); return $this; }
+    public function setRarity(int $rarity): self { $this->rarity = max(1, min(6, $rarity)); return $this; }
+
+    public function isScrollObtainable(): bool { return $this->scrollObtainable; }
+    public function setScrollObtainable(bool $v): self { $this->scrollObtainable = $v; return $this; }
 
     public function getType(): string { return $this->type; }
     public function setType(string $type): self { $this->type = $type; return $this; }

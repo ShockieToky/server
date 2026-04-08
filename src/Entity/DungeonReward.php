@@ -12,7 +12,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Entity(repositoryClass: DungeonRewardRepository::class)]
 class DungeonReward
 {
-    public const REWARD_TYPES = ['gold', 'item', 'scroll'];
+    public const REWARD_TYPES = ['gold', 'item', 'scroll', 'event_currency'];
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -49,6 +49,11 @@ class DungeonReward
     #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
     private ?Scroll $scroll = null;
 
+    /** Rempli si rewardType = 'event_currency'. */
+    #[ORM\ManyToOne(targetEntity: EventCurrency::class)]
+    #[ORM\JoinColumn(nullable: true, onDelete: 'SET NULL')]
+    private ?EventCurrency $eventCurrency = null;
+
     // ── Getters / Setters ─────────────────────────────────────────────────────
 
     public function getId(): ?int { return $this->id; }
@@ -81,4 +86,7 @@ class DungeonReward
 
     public function getScroll(): ?Scroll { return $this->scroll; }
     public function setScroll(?Scroll $scroll): self { $this->scroll = $scroll; return $this; }
+
+    public function getEventCurrency(): ?EventCurrency { return $this->eventCurrency; }
+    public function setEventCurrency(?EventCurrency $ec): self { $this->eventCurrency = $ec; return $this; }
 }
