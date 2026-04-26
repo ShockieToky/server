@@ -50,6 +50,8 @@ class DungeonController extends AbstractController
                 'category'    => $dungeon->getCategory(),
                 'difficulty'  => $dungeon->getDifficulty(),
                 'runCount'    => $progress?->getRunCount() ?? 0,
+                'isUnlocked'  => ($progress?->getRunCount() ?? 0) > 0,
+                'bestTurnCount' => $progress?->getBestTurnCount(),
                 'lastCompletedAt' => $progress?->getLastCompletedAt()?->format(\DateTimeInterface::ATOM),
                 'rewards'     => array_map(fn($r) => [
                     'rewardType'  => $r->getRewardType(),

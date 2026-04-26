@@ -120,6 +120,7 @@ class DungeonManualBattleController extends AbstractController
                 'dungeonId'        => $id,
                 'waveIndex'        => 0,
                 'totalWaves'       => $totalWaves,
+                'stepCount'        => 0,
                 'userHeroIds'      => array_map(fn($uh) => $uh->getId(), $selectedUserHeroes),
                 'bonusFactionId'   => $bonusFactionId,
                 'bonusOrigineId'   => $bonusOrigineId,
@@ -148,6 +149,7 @@ class DungeonManualBattleController extends AbstractController
         $dungeonId    = (int) ($dungeonMeta['dungeonId']  ?? $id);
         $waveIndex    = (int) ($dungeonMeta['waveIndex']  ?? 0);
         $totalWaves   = (int) ($dungeonMeta['totalWaves'] ?? 1);
+        $stepCount    = (int) ($dungeonMeta['stepCount']  ?? 0) + 1;
 
         $state    = $body['state'];
         $attackId = isset($body['attackId']) ? (int) $body['attackId'] : null;
@@ -236,6 +238,7 @@ class DungeonManualBattleController extends AbstractController
                     }
                     $progress->incrementRunCount();
                     $progress->setLastCompletedAt(new \DateTimeImmutable());
+                    $progress->setBestTurnCount($stepCount);
                     $this->em->flush();
 
                     // Calcul et attribution des récompenses avec drop chance
@@ -279,6 +282,7 @@ class DungeonManualBattleController extends AbstractController
                     'state'       => $newState,
                     'dungeonMeta' => array_merge($dungeonMeta, [
                         'waveIndex'   => $waveIndex,
+                        'stepCount'   => $stepCount,
                         'waveCleared' => true,
                         'victory'     => true,
                         'defeat'      => false,

@@ -35,6 +35,10 @@ class UserDungeonProgress
     #[ORM\Column(type: 'datetime_immutable', nullable: true)]
     private ?\DateTimeImmutable $lastCompletedAt = null;
 
+    /** Nombre minimal d'actions effectuées sur le meilleur run (pour le calcul de l'auto-ferme). */
+    #[ORM\Column(nullable: true)]
+    private ?int $bestTurnCount = null;
+
     // ── Getters / Setters ─────────────────────────────────────────────────────
 
     public function getId(): ?int { return $this->id; }
@@ -50,6 +54,14 @@ class UserDungeonProgress
 
     public function getLastCompletedAt(): ?\DateTimeImmutable { return $this->lastCompletedAt; }
     public function setLastCompletedAt(\DateTimeImmutable $dt): self { $this->lastCompletedAt = $dt; return $this; }
+
+    public function getBestTurnCount(): ?int { return $this->bestTurnCount; }
+    public function setBestTurnCount(int $count): self {
+        if ($this->bestTurnCount === null || $count < $this->bestTurnCount) {
+            $this->bestTurnCount = $count;
+        }
+        return $this;
+    }
 
     public function hasCompleted(): bool { return $this->runCount > 0; }
 }
