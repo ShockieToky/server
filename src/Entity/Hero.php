@@ -112,4 +112,15 @@ class Hero
 
     public function getResistance(): int { return $this->resistance; }
     public function setResistance(int $resistance): self { $this->resistance = $resistance; return $this; }
+
+    /**
+     * Applique le multiplicateur de niveau aux stats de puissance (HP, ATK, DEF).
+     * Niveau 1 = 50% des stats max, niveau MAX_LEVEL = 100%.
+     */
+    public static function scaleStat(int $baseStat, int $level, int $maxLevel = 35): int
+    {
+        if ($level >= $maxLevel) return $baseStat;
+        $factor = 0.50 + 0.50 * ($level - 1) / ($maxLevel - 1);
+        return max(1, (int) round($baseStat * $factor));
+    }
 }

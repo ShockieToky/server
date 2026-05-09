@@ -108,6 +108,8 @@ class DungeonAdminController extends AbstractController
             $dungeon->setDifficulty($data['difficulty']);
         }
 
+        if (isset($data['xpReward'])) $dungeon->setXpReward($data['xpReward'] !== null && $data['xpReward'] !== '' ? (int) $data['xpReward'] : null);
+
         foreach ($data['waves'] ?? [] as $waveData) {
             $wave = new DungeonWave();
             $wave->setWaveNumber((int) ($waveData['waveNumber'] ?? 1));
@@ -159,6 +161,7 @@ class DungeonAdminController extends AbstractController
             'category'    => $d->getCategory(),
             'difficulty'  => $d->getDifficulty(),
             'active'      => $d->isActive(),
+            'xpReward'    => $d->getXpReward(),
         ];
 
         if ($full) {

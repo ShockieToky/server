@@ -16,17 +16,6 @@ class CombatContext
     /** Nombre de héros alliés (hors soi-même) partageant la même origine. */
     public int $alliedOrigineCount = 0;
 
-    /**
-     * Bonus de faction sélectionné par le joueur avant combat (+2 max).
-     * Ajouter cette valeur à alliedFactionCount pour simuler le choix joueur.
-     */
-    public int $playerFactionBonus = 0;
-
-    /**
-     * Bonus d'origine sélectionné par le joueur avant combat (+1 max).
-     */
-    public int $playerOrigineBonus = 0;
-
     // --- Modificateurs de stats (accumulés par tous les passifs) ---
 
     public float $attackMultiplier   = 1.0;
@@ -79,12 +68,12 @@ class CombatContext
 
     public function effectiveFactionCount(): int
     {
-        return $this->alliedFactionCount + $this->playerFactionBonus;
+        return $this->alliedFactionCount;
     }
 
     public function effectiveOrigineCount(): int
     {
-        return $this->alliedOrigineCount + $this->playerOrigineBonus;
+        return $this->alliedOrigineCount;
     }
 
     /**

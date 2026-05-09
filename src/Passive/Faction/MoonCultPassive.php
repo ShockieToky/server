@@ -6,7 +6,7 @@ use App\Passive\CombatContext;
 use App\Passive\PassiveInterface;
 
 /**
- * Culte de la Lune — paliers 1 / 3 / 6.
+ * Culte de la Lune — paliers 1 / 2 / 3.
  *
  * À chaque début de tour d'un héros de cette faction, la lune change de phase
  * (cycle : Nouvelle → Demi → Pleine → Nouvelle…).
@@ -23,7 +23,7 @@ use App\Passive\PassiveInterface;
 class MoonCultPassive implements PassiveInterface
 {
     public function getSlug(): string { return 'moon_cult'; }
-    public function thresholds(): array { return [1, 3, 6]; }
+    public function thresholds(): array { return [1, 2, 3]; }
 
     public function apply(CombatContext $context): void
     {
@@ -31,8 +31,8 @@ class MoonCultPassive implements PassiveInterface
         if ($count < 1) return;
 
         $tier = match (true) {
-            $count >= 6 => 3,
-            $count >= 3 => 2,
+            $count >= 3 => 3,
+            $count >= 2 => 2,
             default     => 1,
         };
 

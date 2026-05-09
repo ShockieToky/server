@@ -2,6 +2,7 @@
 namespace App\Controller\Api;
 
 use App\Entity\EquippedExtension;
+use App\Entity\Hero;
 use App\Entity\HeroModule;
 use App\Entity\UserHero;
 use App\Repository\HeroRepository;
@@ -108,17 +109,20 @@ class UserHeroController extends AbstractController
         $origine = $hero?->getOrigine();
 
         return [
-            'id'          => $uh->getId(),
-            'acquiredAt'  => $uh->getAcquiredAt()->format(\DateTime::ATOM),
+            'id'         => $uh->getId(),
+            'level'      => $uh->getLevel(),
+            'xp'         => $uh->getXp(),
+            'xpToNext'   => UserHero::xpToNextLevel($uh->getLevel()),
+            'acquiredAt' => $uh->getAcquiredAt()->format(\DateTime::ATOM),
             'hero'        => [
                 'id'          => $hero?->getId(),
                 'name'        => $hero?->getName(),
                 'description' => $hero?->getDescription(),
                 'rarity'      => $hero?->getRarity(),
                 'type'        => $hero?->getType(),
-                'attack'      => $hero?->getAttack(),
-                'defense'     => $hero?->getDefense(),
-                'hp'          => $hero?->getHp(),
+                'attack'      => Hero::scaleStat($hero?->getAttack()  ?? 0, $uh->getLevel()),
+                'defense'     => Hero::scaleStat($hero?->getDefense() ?? 0, $uh->getLevel()),
+                'hp'          => Hero::scaleStat($hero?->getHp()      ?? 0, $uh->getLevel()),
                 'speed'       => $hero?->getSpeed(),
                 'critRate'    => $hero?->getCritRate(),
                 'critDamage'  => $hero?->getCritDamage(),

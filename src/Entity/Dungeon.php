@@ -39,6 +39,10 @@ class Dungeon
     #[ORM\Column(options: ['default' => true])]
     private bool $active = true;
 
+    /** XP par héros à accorder après victoire. null = formule automatique (nb_vagues × 100). */
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $xpReward = null;
+
     /** @var Collection<int, DungeonWave> */
     #[ORM\OneToMany(mappedBy: 'dungeon', targetEntity: DungeonWave::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['waveNumber' => 'ASC'])]
@@ -72,6 +76,9 @@ class Dungeon
 
     public function isActive(): bool { return $this->active; }
     public function setActive(bool $v): self { $this->active = $v; return $this; }
+
+    public function getXpReward(): ?int { return $this->xpReward; }
+    public function setXpReward(?int $xp): self { $this->xpReward = $xp !== null ? max(0, $xp) : null; return $this; }
 
     /** @return Collection<int, DungeonWave> */
     public function getWaves(): Collection { return $this->waves; }

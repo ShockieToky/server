@@ -17,6 +17,10 @@ class StoryStageRepository extends ServiceEntityRepository
     public function findActive(): array
     {
         return $this->createQueryBuilder('s')
+            ->leftJoin('s.waves', 'w')->addSelect('w')
+            ->leftJoin('s.rewards', 'r')->addSelect('r')
+            ->leftJoin('r.item', 'ri')->addSelect('ri')
+            ->leftJoin('r.scroll', 'rs')->addSelect('rs')
             ->where('s.active = true')
             ->orderBy('s.stageNumber', 'ASC')
             ->getQuery()

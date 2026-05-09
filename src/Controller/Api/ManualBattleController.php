@@ -6,6 +6,7 @@ use App\Battle\ActiveEffect;
 use App\Battle\Combatant;
 use App\Battle\TurnEntry;
 use App\Entity\Hero;
+use App\Entity\UserHero;
 use App\Passive\CombatContext;
 use App\Repository\AttackRepository;
 use App\Repository\HeroRepository;
@@ -55,15 +56,11 @@ class ManualBattleController extends AbstractController
 
         $heroesCombatants = $this->buildCombatants(
             $teamAConfigs, 'player',
-            (int) ($body['teamALeaderFactionId'] ?? 0),
-            (int) ($body['teamALeaderOrigineId'] ?? 0),
             is_string($body['teamAEnclaveDirection'] ?? null) ? $body['teamAEnclaveDirection'] : 'nord',
         );
 
         $enemiesCombatants = $this->buildCombatants(
             $teamBConfigs, 'enemy',
-            (int) ($body['teamBLeaderFactionId'] ?? 0),
-            (int) ($body['teamBLeaderOrigineId'] ?? 0),
             is_string($body['teamBEnclaveDirection'] ?? null) ? $body['teamBEnclaveDirection'] : 'nord',
         );
 
@@ -217,8 +214,6 @@ class ManualBattleController extends AbstractController
     private function buildCombatants(
         array  $configs,
         string $side,
-        int    $leaderFactionId,
-        int    $leaderOrigineId,
         string $enclaveDirection,
     ): array {
         $combatants = [];
@@ -240,9 +235,6 @@ class ManualBattleController extends AbstractController
             $origCount = count(array_filter($heroEntities, fn($pair) => $pair[0]->getOrigine()?->getId() === $orig->getId()));
             $tmpCtx = new CombatContext();
             $tmpCtx->alliedOrigineCount = $origCount;
-            if ($leaderOrigineId > 0 && $orig->getId() === $leaderOrigineId) {
-                $tmpCtx->playerOrigineBonus = 1;
-            }
             $this->bonusResolver->applyOriginePassive($orig, $tmpCtx);
             $teamOrigineCtx->applyFrom($tmpCtx);
         }
@@ -262,14 +254,13 @@ class ManualBattleController extends AbstractController
                 /** @var Hero $other */
                 if ($hero->getFaction() && $other->getFaction()?->getId() === $hero->getFaction()->getId()) $ctx->alliedFactionCount++;
             }
-            if ($leaderFactionId > 0 && $hero->getFaction()?->getId() === $leaderFactionId) $ctx->playerFactionBonus = 2;
             if ($hero->getFaction() !== null) $this->bonusResolver->applyFactionPassive($hero->getFaction(), $ctx);
             // Passifs d'origine : s'appliquent à tous les héros (pré-calculés)
             $ctx->applyFrom($teamOrigineCtx);
 
-            $hp         = max(1, (int) round($hero->getHp()      * (1 + $ext['hpPct']  / 100.0)));
-            $attack     = max(1, (int) round($hero->getAttack()   * (1 + $ext['atkPct'] / 100.0) * $ctx->attackMultiplier));
-            $defense    = max(1, (int) round($hero->getDefense()  * (1 + $ext['defPct'] / 100.0) * $ctx->defenseMultiplier));
+            $hp         = max(1, (int) round(Hero::scaleStat($hero->getHp(),      (int)($cfg['level'] ?? UserHero::MAX_LEVEL)) * (1 + $ext['hpPct']  / 100.0)));
+            $attack     = max(1, (int) round(Hero::scaleStat($hero->getAttack(),  (int)($cfg['level'] ?? UserHero::MAX_LEVEL)) * (1 + $ext['atkPct'] / 100.0) * $ctx->attackMultiplier));
+            $defense    = max(1, (int) round(Hero::scaleStat($hero->getDefense(), (int)($cfg['level'] ?? UserHero::MAX_LEVEL)) * (1 + $ext['defPct'] / 100.0) * $ctx->defenseMultiplier));
             $speed      = max(1, (int) round($hero->getSpeed()    * $ctx->speedMultiplier) + $ext['vitFlat'] + $ctx->flatSpeedBonus);
             $critRate   = min(100, $hero->getCritRate()    + $ext['tccPct']   + (int) round($ctx->critChanceBonus  * 100));
             $critDamage = $hero->getCritDamage()           + $ext['dcPct']    + (int) round($ctx->critDamageBonus * 100);
@@ -291,6 +282,10 @@ class ManualBattleController extends AbstractController
                 resistance:         $resistance,
                 attacks:            $attacks,
                 damageReductionPct: $ctx->damageReductionPct,
+                pveDamagePctBonus:  $ext['dmgPvePct'],
+                pvpDamagePctBonus:  $ext['dmgPvpPct'],
+                pveReductionPct:    $ext['redPvePct'],
+                pvpReductionPct:    $ext['redPvpPct'],
                 passiveTraits:      $ctx->passiveTraits,
             );
 
@@ -333,6 +328,10 @@ class ManualBattleController extends AbstractController
             resistance:         (int) $cs['resistance'],
             attacks:            $attacks,
             damageReductionPct: (float) ($cs['damageReductionPct'] ?? 0.0),
+            pveDamagePctBonus:  (float) ($cs['pveDamagePctBonus']  ?? 0.0),
+            pvpDamagePctBonus:  (float) ($cs['pvpDamagePctBonus']  ?? 0.0),
+            pveReductionPct:    (float) ($cs['pveReductionPct']    ?? 0.0),
+            pvpReductionPct:    (float) ($cs['pvpReductionPct']    ?? 0.0),
             passiveTraits:      (array) ($cs['passiveTraits'] ?? []),
         );
 
@@ -434,6 +433,10 @@ class ManualBattleController extends AbstractController
             'accuracy'         => $c->accuracy,
             'resistance'       => $c->resistance,
             'damageReductionPct' => $c->damageReductionPct,
+            'pveDamagePctBonus'  => $c->pveDamagePctBonus,
+            'pvpDamagePctBonus'  => $c->pvpDamagePctBonus,
+            'pveReductionPct'    => $c->pveReductionPct,
+            'pvpReductionPct'    => $c->pvpReductionPct,
             'passiveTraits'    => $c->passiveTraits,
             'effects'          => array_map(fn(ActiveEffect $e) => [
                 'name'           => $e->name,
@@ -451,24 +454,29 @@ class ManualBattleController extends AbstractController
 
     /**
      * @param list<array{stat:string,value:float}|null> $extensions
-     * @return array{atkPct:float,defPct:float,hpPct:float,tccPct:int,dcPct:int,vitFlat:int,precFlat:int,resFlat:int}
+     * @return array{atkPct:float,defPct:float,hpPct:float,tccPct:int,dcPct:int,vitFlat:int,precFlat:int,resFlat:int,dmgPvePct:float,dmgPvpPct:float,redPvePct:float,redPvpPct:float}
      */
     private function computeExtBonuses(array $extensions): array
     {
-        $b = ['atkPct' => 0.0, 'defPct' => 0.0, 'hpPct' => 0.0, 'tccPct' => 0, 'dcPct' => 0, 'vitFlat' => 0, 'precFlat' => 0, 'resFlat' => 0];
+        $b = ['atkPct' => 0.0, 'defPct' => 0.0, 'hpPct' => 0.0, 'tccPct' => 0, 'dcPct' => 0, 'vitFlat' => 0, 'precFlat' => 0, 'resFlat' => 0,
+              'dmgPvePct' => 0.0, 'dmgPvpPct' => 0.0, 'redPvePct' => 0.0, 'redPvpPct' => 0.0];
         foreach ($extensions as $ext) {
             if (!is_array($ext) || !isset($ext['stat'], $ext['value'])) continue;
             $v = (float) $ext['value'];
             match ($ext['stat']) {
-                'ATK%'  => $b['atkPct']  += $v,
-                'DEF%'  => $b['defPct']  += $v,
-                'HP%'   => $b['hpPct']   += $v,
-                'TCC%'  => $b['tccPct']  += (int) $v,
-                'DC%'   => $b['dcPct']   += (int) $v,
-                'VIT+'  => $b['vitFlat'] += (int) $v,
-                'PREC+' => $b['precFlat']+= (int) $v,
-                'RES+'  => $b['resFlat'] += (int) $v,
-                default => null,
+                'ATK%'    => $b['atkPct']    += $v,
+                'DEF%'    => $b['defPct']    += $v,
+                'HP%'     => $b['hpPct']     += $v,
+                'TCC%'    => $b['tccPct']    += (int) $v,
+                'DC%'     => $b['dcPct']     += (int) $v,
+                'VIT+'    => $b['vitFlat']   += (int) $v,
+                'PREC+'   => $b['precFlat']  += (int) $v,
+                'RES+'    => $b['resFlat']   += (int) $v,
+                'DMGPVE%' => $b['dmgPvePct'] += $v,
+                'DMGPVP%' => $b['dmgPvpPct'] += $v,
+                'REDPVE%' => $b['redPvePct'] += $v,
+                'REDPVP%' => $b['redPvpPct'] += $v,
+                default   => null,
             };
         }
         return $b;

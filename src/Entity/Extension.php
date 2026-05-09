@@ -8,13 +8,13 @@ use Doctrine\ORM\Mapping as ORM;
 /**
  * Catalogue des extensions disponibles.
  * Une entrée = une stat + une rareté + une plage de valeurs.
- * Il y a 8 stats × 4 raretés = 32 entrées possibles.
+ * Il y a 12 stats × 4 raretés = 48 entrées possibles.
  */
 #[ORM\Entity(repositoryClass: ExtensionRepository::class)]
 #[ORM\UniqueConstraint(name: 'uniq_extension_stat_rarity', columns: ['stat', 'rarity'])]
 class Extension
 {
-    const STATS = ['HP%', 'DEF%', 'ATK%', 'TCC%', 'DC%', 'VIT+', 'PREC+', 'RES+'];
+    const STATS = ['HP%', 'DEF%', 'ATK%', 'TCC%', 'DC%', 'VIT+', 'PREC+', 'RES+', 'DMGPVE%', 'DMGPVP%', 'REDPVE%', 'REDPVP%'];
 
     const RARITIES = ['commun', 'peu_commun', 'epique', 'legendaire'];
 
@@ -30,7 +30,11 @@ class Extension
         'DC%'   => ['commun' => [5, 15],  'peu_commun' => [15, 25], 'epique' => [25, 35], 'legendaire' => [35, 45]],
         'VIT+'  => ['commun' => [11, 16], 'peu_commun' => [15, 20], 'epique' => [18, 24], 'legendaire' => [22, 28]],
         'PREC+' => ['commun' => [5, 10],  'peu_commun' => [8, 14],  'epique' => [15, 25], 'legendaire' => [26, 33]],
-        'RES+'  => ['commun' => [5, 10],  'peu_commun' => [8, 14],  'epique' => [15, 25], 'legendaire' => [26, 33]],
+        'RES+'    => ['commun' => [5, 10],  'peu_commun' => [8, 14],  'epique' => [15, 25], 'legendaire' => [26, 33]],
+        'DMGPVE%' => ['commun' => [5, 10],  'peu_commun' => [8, 14],  'epique' => [15, 22], 'legendaire' => [20, 28]],
+        'DMGPVP%' => ['commun' => [5, 10],  'peu_commun' => [8, 14],  'epique' => [15, 22], 'legendaire' => [20, 28]],
+        'REDPVE%' => ['commun' => [3, 6],   'peu_commun' => [5, 9],   'epique' => [8, 14],  'legendaire' => [12, 18]],
+        'REDPVP%' => ['commun' => [3, 6],   'peu_commun' => [5, 9],   'epique' => [8, 14],  'legendaire' => [12, 18]],
     ];
 
     #[ORM\Id]

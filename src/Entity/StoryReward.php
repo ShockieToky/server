@@ -7,12 +7,12 @@ use Doctrine\ORM\Mapping as ORM;
 
 /**
  * Récompense one-shot associée à une étape du mode histoire.
- * rewardType : 'history_token' | 'item' | 'scroll'
+ * rewardType : 'history_token' | 'item' | 'scroll' | 'gold'
  */
 #[ORM\Entity(repositoryClass: StoryRewardRepository::class)]
 class StoryReward
 {
-    public const REWARD_TYPES = ['history_token', 'item', 'scroll'];
+    public const REWARD_TYPES = ['history_token', 'item', 'scroll', 'gold'];
 
     #[ORM\Id]
     #[ORM\GeneratedValue]
@@ -23,7 +23,7 @@ class StoryReward
     #[ORM\JoinColumn(nullable: false, onDelete: 'CASCADE')]
     private ?StoryStage $stage = null;
 
-    /** 'history_token' | 'item' | 'scroll' */
+    /** 'history_token' | 'item' | 'scroll' | 'gold' */
     #[ORM\Column(length: 15)]
     private string $rewardType = 'history_token';
 

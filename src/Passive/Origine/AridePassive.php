@@ -6,18 +6,18 @@ use App\Passive\CombatContext;
 use App\Passive\PassiveInterface;
 
 /**
- * Aride — paliers 1 / 3 / 5.
+ * Aride — paliers 1 / 2 / 3.
  *
  * Réduit la précision des ennemis.
  *
  * Palier 1 : −5 de précision ennemie.
- * Palier 3 : −8.
- * Palier 5 : −12.
+ * Palier 2 : −8.
+ * Palier 3 : −12.
  */
 class AridePassive implements PassiveInterface
 {
     public function getSlug(): string { return 'aride'; }
-    public function thresholds(): array { return [1, 3, 5]; }
+    public function thresholds(): array { return [1, 2, 3]; }
 
     public function apply(CombatContext $context): void
     {
@@ -25,8 +25,8 @@ class AridePassive implements PassiveInterface
         if ($count < 1) return;
 
         $debuff = match (true) {
-            $count >= 5 => 12,
-            $count >= 3 =>  8,
+            $count >= 3 => 12,
+            $count >= 2 =>  8,
             default     =>  5,
         };
 

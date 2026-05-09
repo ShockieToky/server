@@ -7,6 +7,7 @@ use App\Battle\Combatant;
 use App\Battle\TurnEntry;
 use App\Entity\ArenaBattle;
 use App\Entity\ArenaDefense;
+use App\Entity\Hero;
 use App\Entity\User;
 use App\Passive\CombatContext;
 use App\Repository\ArenaAdminTeamRepository;
@@ -70,9 +71,6 @@ class ArenaBattleController extends AbstractController
         $defenseId      = isset($body['defenseId'])   ? (int) $body['defenseId']   : null;
         $adminTeamId    = isset($body['adminTeamId'])  ? (int) $body['adminTeamId'] : null;
         $heroIds        = (array) ($body['heroIds']        ?? []);
-        $bonusFactionId = (int)   ($body['leadFactionId']  ?? 0);
-        $bonusOrigineId = (int)   ($body['leadOrigineId']  ?? 0);
-
         if (!$defenseId && !$adminTeamId) {
             return $this->json(['message' => 'defenseId ou adminTeamId est requis'], Response::HTTP_BAD_REQUEST);
         }
@@ -102,7 +100,7 @@ class ArenaBattleController extends AbstractController
         }
 
         [$attackerCombatants] = $this->buildTeamCombatants(
-            $attackerHeroes, $bonusFactionId, $bonusOrigineId, 'player', 'atk'
+            $attackerHeroes, 'player', 'atk'
         );
 
         // ── Chemin 1 : équipe bot admin ────────────────────────────────────────
@@ -114,8 +112,6 @@ class ArenaBattleController extends AbstractController
 
             [$defenderCombatants] = $this->buildAdminTeamCombatants(
                 $adminTeam->getHeroes(),
-                (int) $adminTeam->getLeadFactionId(),
-                (int) $adminTeam->getLeadOrigineId(),
             );
 
             foreach ($defenderCombatants as $c) { $c->aiMode = 'advanced'; }
@@ -146,8 +142,6 @@ class ArenaBattleController extends AbstractController
         $defenderHeroes = $defense->getHeroes();
         [$defenderCombatants] = $this->buildTeamCombatants(
             $defenderHeroes,
-            (int) $defense->getLeadFactionId(),
-            (int) $defense->getLeadOrigineId(),
             'enemy',
             'def'
         );
@@ -416,8 +410,6 @@ class ArenaBattleController extends AbstractController
      */
     private function buildTeamCombatants(
         array  $userHeroes,
-        int    $bonusFactionId,
-        int    $bonusOrigineId,
         string $side,
         string $idPrefix,
     ): array {
@@ -434,9 +426,6 @@ class ArenaBattleController extends AbstractController
             $origCount = count(array_filter($userHeroes, fn($u) => $u->getHero()->getOrigine()?->getId() === $orig->getId()));
             $tmpCtx = new CombatContext();
             $tmpCtx->alliedOrigineCount = $origCount;
-            if ($bonusOrigineId > 0 && $orig->getId() === $bonusOrigineId) {
-                $tmpCtx->playerOrigineBonus = 1;
-            }
             $this->bonusResolver->applyOriginePassive($orig, $tmpCtx);
             $teamOrigineCtx->applyFrom($tmpCtx);
         }
@@ -455,9 +444,6 @@ class ArenaBattleController extends AbstractController
                         $ctx->alliedFactionCount++;
                     }
                 }
-                if ($bonusFactionId > 0 && $hero->getFaction()?->getId() === $bonusFactionId) {
-                    $ctx->playerFactionBonus = 2;
-                }
                 $this->bonusResolver->applyFactionPassive($hero->getFaction(), $ctx);
             }
             $ctx->applyFrom($teamOrigineCtx);
@@ -465,6 +451,7 @@ class ArenaBattleController extends AbstractController
             // Extensions équipées
             $extHpPct = $extAtkPct = $extDefPct = 0.0;
             $extTccFlat = $extDcFlat = $extVitFlat = $extPrecFlat = $extResFlat = 0;
+            $extDmgPvePct = $extDmgPvpPct = $extRedPvePct = $extRedPvpPct = 0.0;
             foreach ($userHero->getModules() as $module) {
                 foreach ($module->getSlots() as $slot) {
                     $ue = $slot->getUserExtension();
@@ -472,15 +459,19 @@ class ArenaBattleController extends AbstractController
                     $stat = $ue->getExtension()->getStat();
                     $val  = $ue->getRolledValue();
                     match ($stat) {
-                        'HP%'   => $extHpPct    += $val,
-                        'ATK%'  => $extAtkPct   += $val,
-                        'DEF%'  => $extDefPct   += $val,
-                        'TCC%'  => $extTccFlat  += $val,
-                        'DC%'   => $extDcFlat   += $val,
-                        'VIT+'  => $extVitFlat  += $val,
-                        'PREC+' => $extPrecFlat += $val,
-                        'RES+'  => $extResFlat  += $val,
-                        default => null,
+                        'HP%'     => $extHpPct     += $val,
+                        'ATK%'    => $extAtkPct    += $val,
+                        'DEF%'    => $extDefPct    += $val,
+                        'TCC%'    => $extTccFlat   += $val,
+                        'DC%'     => $extDcFlat    += $val,
+                        'VIT+'    => $extVitFlat   += $val,
+                        'PREC+'   => $extPrecFlat  += $val,
+                        'RES+'    => $extResFlat   += $val,
+                        'DMGPVE%' => $extDmgPvePct += $val,
+                        'DMGPVP%' => $extDmgPvpPct += $val,
+                        'REDPVE%' => $extRedPvePct += $val,
+                        'REDPVP%' => $extRedPvpPct += $val,
+                        default   => null,
                     };
                 }
             }
@@ -490,9 +481,9 @@ class ArenaBattleController extends AbstractController
                 id:                 "{$idPrefix}_{$userHero->getId()}_{$hero->getId()}",
                 side:               $side,
                 name:               $hero->getName(),
-                maxHp:              max(1, (int) round($hero->getHp()     * (1.0 + $extHpPct  / 100.0))),
-                baseAttack:         max(1, (int) round($hero->getAttack()  * $ctx->attackMultiplier  * (1.0 + $extAtkPct / 100.0))),
-                baseDefense:        max(1, (int) round($hero->getDefense() * $ctx->defenseMultiplier * (1.0 + $extDefPct / 100.0))),
+                maxHp:              max(1, (int) round(Hero::scaleStat($hero->getHp(),      $userHero->getLevel()) * (1.0 + $extHpPct  / 100.0))),
+                baseAttack:         max(1, (int) round(Hero::scaleStat($hero->getAttack(),  $userHero->getLevel()) * $ctx->attackMultiplier  * (1.0 + $extAtkPct / 100.0))),
+                baseDefense:        max(1, (int) round(Hero::scaleStat($hero->getDefense(), $userHero->getLevel()) * $ctx->defenseMultiplier * (1.0 + $extDefPct / 100.0))),
                 baseSpeed:          max(1, (int) round($hero->getSpeed()   * $ctx->speedMultiplier) + $ctx->flatSpeedBonus + $extVitFlat),
                 critRate:           min(100, $hero->getCritRate()   + (int) round($ctx->critChanceBonus * 100) + $extTccFlat),
                 critDamage:         $hero->getCritDamage()          + (int) round($ctx->critDamageBonus * 100) + $extDcFlat,
@@ -500,6 +491,10 @@ class ArenaBattleController extends AbstractController
                 resistance:         min(100, $hero->getResistance() + $ctx->resistanceBonus + $extResFlat),
                 attacks:            $attacks,
                 damageReductionPct: $ctx->damageReductionPct,
+                pveDamagePctBonus:  $extDmgPvePct,
+                pvpDamagePctBonus:  $extDmgPvpPct,
+                pveReductionPct:    $extRedPvePct,
+                pvpReductionPct:    $extRedPvpPct,
                 passiveTraits:      array_merge($ctx->passiveTraits, [
                     '_heroId'      => $hero->getId(),
                     '_factionName' => $hero->getFaction()?->getName(),
@@ -538,8 +533,6 @@ class ArenaBattleController extends AbstractController
      */
     private function buildAdminTeamCombatants(
         array $heroes,
-        int   $bonusFactionId,
-        int   $bonusOrigineId,
     ): array {
         $combatants      = [];
         $maxFoeAccDebuff = 0;
@@ -553,9 +546,6 @@ class ArenaBattleController extends AbstractController
             $origCount = count(array_filter($heroes, fn($h) => $h->getOrigine()?->getId() === $orig->getId()));
             $tmpCtx = new CombatContext();
             $tmpCtx->alliedOrigineCount = $origCount;
-            if ($bonusOrigineId > 0 && $orig->getId() === $bonusOrigineId) {
-                $tmpCtx->playerOrigineBonus = 1;
-            }
             $this->bonusResolver->applyOriginePassive($orig, $tmpCtx);
             $teamOrigineCtx->applyFrom($tmpCtx);
         }
@@ -572,9 +562,6 @@ class ArenaBattleController extends AbstractController
                     if ($other->getFaction()?->getId() === $hero->getFaction()->getId()) {
                         $ctx->alliedFactionCount++;
                     }
-                }
-                if ($bonusFactionId > 0 && $hero->getFaction()?->getId() === $bonusFactionId) {
-                    $ctx->playerFactionBonus = 2;
                 }
                 $this->bonusResolver->applyFactionPassive($hero->getFaction(), $ctx);
             }
@@ -648,6 +635,10 @@ class ArenaBattleController extends AbstractController
             resistance:         (int)    $cs['resistance'],
             attacks:            $attacks,
             damageReductionPct: (float)  ($cs['damageReductionPct'] ?? 0.0),
+            pveDamagePctBonus:  (float)  ($cs['pveDamagePctBonus']  ?? 0.0),
+            pvpDamagePctBonus:  (float)  ($cs['pvpDamagePctBonus']  ?? 0.0),
+            pveReductionPct:    (float)  ($cs['pveReductionPct']    ?? 0.0),
+            pvpReductionPct:    (float)  ($cs['pvpReductionPct']    ?? 0.0),
             passiveTraits:      (array)  ($cs['passiveTraits']      ?? []),
         );
 
@@ -744,6 +735,10 @@ class ArenaBattleController extends AbstractController
             'accuracy'           => $c->accuracy,
             'resistance'         => $c->resistance,
             'damageReductionPct' => $c->damageReductionPct,
+            'pveDamagePctBonus'  => $c->pveDamagePctBonus,
+            'pvpDamagePctBonus'  => $c->pvpDamagePctBonus,
+            'pveReductionPct'    => $c->pveReductionPct,
+            'pvpReductionPct'    => $c->pvpReductionPct,
             'passiveTraits'      => $c->passiveTraits,
             'effects'            => array_map(fn(ActiveEffect $e) => [
                 'name'           => $e->name,

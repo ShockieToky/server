@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Battle\ActiveEffect;
 use App\Battle\Combatant;
 use App\Battle\BattleResult;
+use App\Entity\Hero;
 use App\Entity\User;
 use App\Entity\UserStoryProgress;
 use App\Passive\CombatContext;
@@ -63,8 +64,6 @@ class StoryFightController extends AbstractController
             return $this->json(['message' => 'heroIds doit contenir 1 à 4 IDs'], Response::HTTP_BAD_REQUEST);
         }
 
-        $bonusFactionId   = (int) ($body['bonusFactionId']   ?? 0);
-        $bonusOrigineId   = (int) ($body['bonusOrigineId']   ?? 0);
         $enclaveDirection = is_string($body['enclaveDirection'] ?? null) ? $body['enclaveDirection'] : 'nord';
 
         // ── Chargement des UserHero du joueur ─────────────────────────────────
@@ -97,9 +96,6 @@ class StoryFightController extends AbstractController
             $origCount = count(array_filter($selectedUserHeroes, fn($u) => $u->getHero()->getOrigine()?->getId() === $orig->getId()));
             $tmpCtx = new CombatContext();
             $tmpCtx->alliedOrigineCount = $origCount;
-            if ($bonusOrigineId > 0 && $orig->getId() === $bonusOrigineId) {
-                $tmpCtx->playerOrigineBonus = 1;
-            }
             $this->bonusResolver->applyOriginePassive($orig, $tmpCtx);
             $teamOrigineCtx->applyFrom($tmpCtx);
         }
@@ -121,9 +117,6 @@ class StoryFightController extends AbstractController
                         $ctx->alliedFactionCount++;
                     }
                 }
-                if ($bonusFactionId > 0 && $hero->getFaction()?->getId() === $bonusFactionId) {
-                    $ctx->playerFactionBonus = 2;
-                }
                 $this->bonusResolver->applyFactionPassive($hero->getFaction(), $ctx);
             }
             // Passifs d'origine : s'appliquent à tous les héros (pré-calculés)
@@ -134,9 +127,9 @@ class StoryFightController extends AbstractController
                 id:                 'hero_' . $userHero->getId(),
                 side:               'player',
                 name:               $hero->getName(),
-                maxHp:              max(1, (int) round($hero->getHp()     * 1.0)),
-                baseAttack:         max(1, (int) round($hero->getAttack()  * $ctx->attackMultiplier)),
-                baseDefense:        max(1, (int) round($hero->getDefense() * $ctx->defenseMultiplier)),
+                maxHp:              max(1, (int) round(Hero::scaleStat($hero->getHp(),      $userHero->getLevel()) * 1.0)),
+                baseAttack:         max(1, (int) round(Hero::scaleStat($hero->getAttack(),  $userHero->getLevel()) * $ctx->attackMultiplier)),
+                baseDefense:        max(1, (int) round(Hero::scaleStat($hero->getDefense(), $userHero->getLevel()) * $ctx->defenseMultiplier)),
                 baseSpeed:          max(1, (int) round($hero->getSpeed()   * $ctx->speedMultiplier) + $ctx->flatSpeedBonus),
                 critRate:           min(100, $hero->getCritRate()   + (int) round($ctx->critChanceBonus * 100)),
                 critDamage:         $hero->getCritDamage()          + (int) round($ctx->critDamageBonus * 100),
@@ -218,6 +211,36 @@ class StoryFightController extends AbstractController
             }
         }
 
-        return $this->json($result->toArray());
+        // ── Récompenses + XP ─────────────────────────────────────────────────
+        $earnedRewards = [];
+        $heroXpResults = [];
+        if ($result->victory) {
+            // Récompenses
+            foreach ($stage->getRewards() as $reward) {
+                $qty = $reward->getQuantity();
+                $earnedRewards[] = [
+                    'rewardType' => $reward->getRewardType(),
+                    'quantity'   => $qty,
+                    'item'       => $reward->getItem()   ? ['id' => $reward->getItem()->getId(),   'name' => $reward->getItem()->getName()]   : null,
+                    'scroll'     => $reward->getScroll() ? ['id' => $reward->getScroll()->getId(), 'name' => $reward->getScroll()->getName()] : null,
+                ];
+                if ($reward->getRewardType() === 'gold') {
+                    $user->setGoldToken($user->getGoldToken() + $qty);
+                }
+            }
+
+            // XP des héros
+            $xpPerHero = $stage->getXpReward() ?? (count($stage->getWaves()) * 100);
+            foreach ($selectedUserHeroes as $uh) {
+                $xpResult        = $uh->addXp($xpPerHero);
+                $heroXpResults[] = array_merge(['userHeroId' => $uh->getId(), 'heroName' => $uh->getHero()->getName(), 'xpGained' => $xpPerHero], $xpResult);
+            }
+            $this->em->flush();
+        }
+
+        $payload                  = $result->toArray();
+        $payload['rewards']       = $earnedRewards;
+        $payload['heroXpResults'] = $heroXpResults;
+        return $this->json($payload);
     }
 }

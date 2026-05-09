@@ -34,6 +34,10 @@ class StoryStage
     #[ORM\Column(options: ['default' => true])]
     private bool $active = true;
 
+    /** XP par héros à accorder après victoire. null = formule automatique (nb_vagues × 100). */
+    #[ORM\Column(type: 'integer', nullable: true)]
+    private ?int $xpReward = null;
+
     /** @var Collection<int, StoryWave> */
     #[ORM\OneToMany(mappedBy: 'stage', targetEntity: StoryWave::class, cascade: ['persist', 'remove'], orphanRemoval: true)]
     #[ORM\OrderBy(['waveNumber' => 'ASC'])]
@@ -64,6 +68,9 @@ class StoryStage
 
     public function isActive(): bool { return $this->active; }
     public function setActive(bool $v): self { $this->active = $v; return $this; }
+
+    public function getXpReward(): ?int { return $this->xpReward; }
+    public function setXpReward(?int $xp): self { $this->xpReward = $xp !== null ? max(0, $xp) : null; return $this; }
 
     /** @return Collection<int, StoryWave> */
     public function getWaves(): Collection { return $this->waves; }

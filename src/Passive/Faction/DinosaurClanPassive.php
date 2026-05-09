@@ -6,7 +6,7 @@ use App\Passive\CombatContext;
 use App\Passive\PassiveInterface;
 
 /**
- * Clan des Dinosaures — paliers 1 / 3 / 6.
+ * Clan des Dinosaures — paliers 1 / 2 / 3.
  *
  * Le héros dispose d'un compagnon dinosaure qui agit en combat.
  *
@@ -24,7 +24,7 @@ use App\Passive\PassiveInterface;
 class DinosaurClanPassive implements PassiveInterface
 {
     public function getSlug(): string { return 'dinosaur_clan'; }
-    public function thresholds(): array { return [1, 3, 6]; }
+    public function thresholds(): array { return [1, 2, 3]; }
 
     public function apply(CombatContext $context): void
     {
@@ -34,8 +34,8 @@ class DinosaurClanPassive implements PassiveInterface
         // dino_tier est posé sur chaque héros du clan ; BonusResolverService::redistributeDinoTrait
         // le déplace ensuite sur le dernier héros de l'équipe (peu importe sa faction).
         $tier = match (true) {
-            $count >= 6 => 3,
-            $count >= 3 => 2,
+            $count >= 3 => 3,
+            $count >= 2 => 2,
             default     => 1,
         };
 

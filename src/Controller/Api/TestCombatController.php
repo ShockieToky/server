@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Battle\ActiveEffect;
 use App\Battle\Combatant;
 use App\Entity\Hero;
+use App\Entity\UserHero;
 use App\Passive\CombatContext;
 use App\Repository\AttackRepository;
 use App\Repository\HeroRepository;
@@ -27,11 +28,7 @@ use Symfony\Component\Security\Http\Attribute\IsGranted;
  * {
  *   "teamA": [ { "heroId": int, "extensions": [{stat, value}|null, ...×12] } × 1-4 ],
  *   "teamB": [ ... ],
- *   "teamALeaderFactionId": int,
- *   "teamALeaderOrigineId": int,
  *   "teamAEnclaveDirection": "nord"|"sud",
- *   "teamBLeaderFactionId": int,
- *   "teamBLeaderOrigineId": int,
  *   "teamBEnclaveDirection": "nord"|"sud"
  * }
  */
@@ -74,14 +71,10 @@ class TestCombatController extends AbstractController
 
         [$teamACombatants, $teamAStats] = $this->buildTeam(
             $teamAConfigs, 'player',
-            (int) ($body['teamALeaderFactionId'] ?? 0),
-            (int) ($body['teamALeaderOrigineId'] ?? 0),
             is_string($body['teamAEnclaveDirection'] ?? null) ? $body['teamAEnclaveDirection'] : 'nord',
         );
         [$teamBCombatants, $teamBStats] = $this->buildTeam(
             $teamBConfigs, 'enemy',
-            (int) ($body['teamBLeaderFactionId'] ?? 0),
-            (int) ($body['teamBLeaderOrigineId'] ?? 0),
             is_string($body['teamBEnclaveDirection'] ?? null) ? $body['teamBEnclaveDirection'] : 'nord',
         );
 
@@ -109,8 +102,6 @@ class TestCombatController extends AbstractController
     private function buildTeam(
         array  $configs,
         string $side,
-        int    $leaderFactionId,
-        int    $leaderOrigineId,
         string $enclaveDirection,
     ): array {
         /** @var array<int, array{Hero, array}> $heroEntities */
@@ -136,9 +127,6 @@ class TestCombatController extends AbstractController
             $origCount = count(array_filter($heroEntities, fn($pair) => $pair[0]->getOrigine()?->getId() === $orig->getId()));
             $tmpCtx = new CombatContext();
             $tmpCtx->alliedOrigineCount = $origCount;
-            if ($leaderOrigineId > 0 && $orig->getId() === $leaderOrigineId) {
-                $tmpCtx->playerOrigineBonus = 1;
-            }
             $this->bonusResolver->applyOriginePassive($orig, $tmpCtx);
             $teamOrigineCtx->applyFrom($tmpCtx);
         }
@@ -159,9 +147,6 @@ class TestCombatController extends AbstractController
                     $ctx->alliedFactionCount++;
                 }
             }
-            if ($leaderFactionId > 0 && $hero->getFaction()?->getId() === $leaderFactionId) {
-                $ctx->playerFactionBonus = 2;
-            }
             if ($hero->getFaction() !== null) {
                 $this->bonusResolver->applyFactionPassive($hero->getFaction(), $ctx);
             }
@@ -169,9 +154,10 @@ class TestCombatController extends AbstractController
             $ctx->applyFrom($teamOrigineCtx);
 
             // ── Stats finales ─────────────────────────────────────────────────
-            $hp         = max(1, (int) round($hero->getHp()      * (1 + $ext['hpPct']  / 100.0)));
-            $attack     = max(1, (int) round($hero->getAttack()   * (1 + $ext['atkPct'] / 100.0) * $ctx->attackMultiplier));
-            $defense    = max(1, (int) round($hero->getDefense()  * (1 + $ext['defPct'] / 100.0) * $ctx->defenseMultiplier));
+            $level      = (int) ($cfg['level'] ?? UserHero::MAX_LEVEL);
+            $hp         = max(1, (int) round(Hero::scaleStat($hero->getHp(),      $level) * (1 + $ext['hpPct']  / 100.0)));
+            $attack     = max(1, (int) round(Hero::scaleStat($hero->getAttack(),  $level) * (1 + $ext['atkPct'] / 100.0) * $ctx->attackMultiplier));
+            $defense    = max(1, (int) round(Hero::scaleStat($hero->getDefense(), $level) * (1 + $ext['defPct'] / 100.0) * $ctx->defenseMultiplier));
             $speed      = max(1, (int) round($hero->getSpeed()    * $ctx->speedMultiplier) + $ext['vitFlat'] + $ctx->flatSpeedBonus);
             $critRate   = min(100, $hero->getCritRate()    + $ext['tccPct']   + (int) round($ctx->critChanceBonus  * 100));
             $critDamage = $hero->getCritDamage()           + $ext['dcPct']    + (int) round($ctx->critDamageBonus * 100);
@@ -193,6 +179,10 @@ class TestCombatController extends AbstractController
                 resistance:         $resistance,
                 attacks:            $attacks,
                 damageReductionPct: $ctx->damageReductionPct,
+                pveDamagePctBonus:  $ext['dmgPvePct'],
+                pvpDamagePctBonus:  $ext['dmgPvpPct'],
+                pveReductionPct:    $ext['redPvePct'],
+                pvpReductionPct:    $ext['redPvpPct'],
                 passiveTraits:      $ctx->passiveTraits,
             );
 
@@ -226,27 +216,32 @@ class TestCombatController extends AbstractController
 
     /**
      * @param list<array{stat:string,value:float}|null> $extensions
-     * @return array{atkPct:float,defPct:float,hpPct:float,tccPct:int,dcPct:int,vitFlat:int,precFlat:int,resFlat:int}
+     * @return array{atkPct:float,defPct:float,hpPct:float,tccPct:int,dcPct:int,vitFlat:int,precFlat:int,resFlat:int,dmgPvePct:float,dmgPvpPct:float,redPvePct:float,redPvpPct:float}
      */
     private function computeExtBonuses(array $extensions): array
     {
         $b = [
             'atkPct' => 0.0, 'defPct' => 0.0, 'hpPct' => 0.0,
             'tccPct' => 0, 'dcPct' => 0, 'vitFlat' => 0, 'precFlat' => 0, 'resFlat' => 0,
+            'dmgPvePct' => 0.0, 'dmgPvpPct' => 0.0, 'redPvePct' => 0.0, 'redPvpPct' => 0.0,
         ];
         foreach ($extensions as $ext) {
             if (!is_array($ext) || !isset($ext['stat'], $ext['value'])) continue;
             $v = (float) $ext['value'];
             match ($ext['stat']) {
-                'ATK%'  => $b['atkPct']   += $v,
-                'DEF%'  => $b['defPct']   += $v,
-                'HP%'   => $b['hpPct']    += $v,
-                'TCC%'  => $b['tccPct']   += (int) $v,
-                'DC%'   => $b['dcPct']    += (int) $v,
-                'VIT+'  => $b['vitFlat']  += (int) $v,
-                'PREC+' => $b['precFlat'] += (int) $v,
-                'RES+'  => $b['resFlat']  += (int) $v,
-                default => null,
+                'ATK%'    => $b['atkPct']    += $v,
+                'DEF%'    => $b['defPct']    += $v,
+                'HP%'     => $b['hpPct']     += $v,
+                'TCC%'    => $b['tccPct']    += (int) $v,
+                'DC%'     => $b['dcPct']     += (int) $v,
+                'VIT+'    => $b['vitFlat']   += (int) $v,
+                'PREC+'   => $b['precFlat']  += (int) $v,
+                'RES+'    => $b['resFlat']   += (int) $v,
+                'DMGPVE%' => $b['dmgPvePct'] += $v,
+                'DMGPVP%' => $b['dmgPvpPct'] += $v,
+                'REDPVE%' => $b['redPvePct'] += $v,
+                'REDPVP%' => $b['redPvpPct'] += $v,
+                default   => null,
             };
         }
         return $b;

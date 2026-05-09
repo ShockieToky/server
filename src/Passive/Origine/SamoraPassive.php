@@ -6,18 +6,18 @@ use App\Passive\CombatContext;
 use App\Passive\PassiveInterface;
 
 /**
- * Samora — paliers 1 / 3 / 5.
+ * Samora — paliers 1 / 2 / 3.
  *
  * Augmente la résistance (plafonnée à 100 dans le contrôleur).
  *
  * Palier 1 : +5 de résistance.
- * Palier 3 : +10.
- * Palier 5 : +15.
+ * Palier 2 : +10.
+ * Palier 3 : +15.
  */
 class SamoraPassive implements PassiveInterface
 {
     public function getSlug(): string { return 'samora'; }
-    public function thresholds(): array { return [1, 3, 5]; }
+    public function thresholds(): array { return [1, 2, 3]; }
 
     public function apply(CombatContext $context): void
     {
@@ -25,8 +25,8 @@ class SamoraPassive implements PassiveInterface
         if ($count < 1) return;
 
         $bonus = match (true) {
-            $count >= 5 => 15,
-            $count >= 3 => 10,
+            $count >= 3 => 15,
+            $count >= 2 => 10,
             default     =>  5,
         };
 

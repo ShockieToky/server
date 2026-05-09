@@ -104,6 +104,8 @@ class StoryAdminController extends AbstractController
         if (isset($data['description'])) $stage->setDescription($data['description'] ?: null);
         if (isset($data['active']))      $stage->setActive((bool) $data['active']);
 
+        if (isset($data['xpReward'])) $stage->setXpReward($data['xpReward'] !== null && $data['xpReward'] !== '' ? (int) $data['xpReward'] : null);
+
         // Vagues (3 max)
         foreach ($data['waves'] ?? [] as $waveData) {
             $wave = new StoryWave();
@@ -148,6 +150,7 @@ class StoryAdminController extends AbstractController
             'name'        => $s->getName(),
             'description' => $s->getDescription(),
             'active'      => $s->isActive(),
+            'xpReward'    => $s->getXpReward(),
         ];
         if (!$full) return $base;
 

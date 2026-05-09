@@ -6,18 +6,18 @@ use App\Passive\CombatContext;
 use App\Passive\PassiveInterface;
 
 /**
- * Occultiste du Sommeil — paliers 1 / 3 / 6.
+ * Occultiste du Sommeil — paliers 1 / 2 / 3.
  *
  * Proc post-attaque : chance d'endormir la cible.
  * Si la cible est DÉJÀ endormie, les dégâts sont amplifiés.
  *   1 : 5 % sommeil, +20 % dégâts vs endormi
- *   3 : 8 % sommeil, +30 %
- *   6 : 12 % sommeil, +45 %
+ *   2 : 8 % sommeil, +30 %
+ *   3 : 12 % sommeil, +45 %
  */
 class SleepingCultPassive implements PassiveInterface
 {
     public function getSlug(): string { return 'sleeping_cult'; }
-    public function thresholds(): array { return [1, 3, 6]; }
+    public function thresholds(): array { return [1, 2, 3]; }
 
     public function apply(CombatContext $context): void
     {
@@ -25,8 +25,8 @@ class SleepingCultPassive implements PassiveInterface
         if ($count < 1) return;
 
         [$chance, $bonus] = match (true) {
-            $count >= 6 => [12, 45.0],
-            $count >= 3 => [8,  30.0],
+            $count >= 3 => [12, 45.0],
+            $count >= 2 => [8,  30.0],
             default     => [5,  20.0],
         };
 

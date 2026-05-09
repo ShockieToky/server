@@ -6,18 +6,18 @@ use App\Passive\CombatContext;
 use App\Passive\PassiveInterface;
 
 /**
- * Ordre du Feu — paliers 1 / 3 / 6 alliés de même faction.
+ * Ordre du Feu — paliers 1 / 2 / 3 alliés de même faction.
  *
  * Proc post-attaque : chance d'infliger brûlure 1 tour.
  * Les brûlures sont plus efficaces (+ bonus % sur les dégâts par tour).
  *   1 : 20 % chance, brûlure +2 %
- *   3 : 30 % chance, brûlure +4 %
- *   6 : 50 % chance, brûlure +6 %
+ *   2 : 30 % chance, brûlure +4 %
+ *   3 : 50 % chance, brûlure +6 %
  */
 class FireOrderPassive implements PassiveInterface
 {
     public function getSlug(): string { return 'fire_order'; }
-    public function thresholds(): array { return [1, 3, 6]; }
+    public function thresholds(): array { return [1, 2, 3]; }
 
     public function apply(CombatContext $context): void
     {
@@ -25,8 +25,8 @@ class FireOrderPassive implements PassiveInterface
         if ($count < 1) return;
 
         [$chance, $bonus] = match (true) {
-            $count >= 6 => [50, 6.0],
-            $count >= 3 => [30, 4.0],
+            $count >= 3 => [50, 6.0],
+            $count >= 2 => [30, 4.0],
             default     => [20, 2.0],
         };
 

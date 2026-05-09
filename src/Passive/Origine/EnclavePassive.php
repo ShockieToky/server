@@ -6,20 +6,20 @@ use App\Passive\CombatContext;
 use App\Passive\PassiveInterface;
 
 /**
- * Enclave — paliers 1 / 3 / 5.
+ * Enclave — paliers 1 / 2 / 3.
  *
  * Bonus de dégâts selon la direction (nord / sud) choisie par le joueur.
  *
  * Palier 1 :  +4 % de dégâts aux ennemis de la direction opposée.
- * Palier 3 :  +7 %.
- * Palier 5 : +10 %.
+ * Palier 2 :  +7 %.
+ * Palier 3 : +10 %.
  *
  * La direction ('nord' ou 'sud') est fournie par le contrôleur via passiveTraits['enclave_direction'].
  */
 class EnclavePassive implements PassiveInterface
 {
     public function getSlug(): string { return 'enclave'; }
-    public function thresholds(): array { return [1, 3, 5]; }
+    public function thresholds(): array { return [1, 2, 3]; }
 
     public function apply(CombatContext $context): void
     {
@@ -27,8 +27,8 @@ class EnclavePassive implements PassiveInterface
         if ($count < 1) return;
 
         $bonus = match (true) {
-            $count >= 5 => 10.0,
-            $count >= 3 =>  7.0,
+            $count >= 3 => 10.0,
+            $count >= 2 =>  7.0,
             default     =>  4.0,
         };
 

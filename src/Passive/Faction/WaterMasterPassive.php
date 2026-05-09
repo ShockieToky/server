@@ -6,33 +6,33 @@ use App\Passive\CombatContext;
 use App\Passive\PassiveInterface;
 
 /**
- * Maître de l'Eau — paliers 2 / 4 / 6.
+ * Maître de l'Eau — paliers 1 / 2 / 3.
  *
- * Palier 2 : Bouclier initial de 5 % des PV max.
- * Palier 4 : Soin de 5 % des PV max au début de chaque tour.
- * Palier 6 : 20 % de chance de bloquer (réduire de 25 %) chaque coup entrant.
+ * Palier 1 : Bouclier initial de 5 % des PV max.
+ * Palier 2 : Soin de 5 % des PV max au début de chaque tour.
+ * Palier 3 : 20 % de chance de bloquer (réduire de 25 %) chaque coup entrant.
  */
 class WaterMasterPassive implements PassiveInterface
 {
     public function getSlug(): string { return 'water_master'; }
-    public function thresholds(): array { return [2, 4, 6]; }
+    public function thresholds(): array { return [1, 2, 3]; }
 
     public function apply(CombatContext $context): void
     {
         $count = $context->effectiveFactionCount();
-        if ($count < 2) return;
+        if ($count < 1) return;
 
         $effects = [];
 
-        if ($count >= 2) {
+        if ($count >= 1) {
             $context->initialShieldPct = max($context->initialShieldPct, 5.0);
             $effects[] = 'Bouclier initial +5 % PV';
         }
-        if ($count >= 4) {
+        if ($count >= 2) {
             $context->passiveTraits['water_turn_heal_pct'] = 5.0;
             $effects[] = 'Soin +5 % PV/tour';
         }
-        if ($count >= 6) {
+        if ($count >= 3) {
             $context->passiveTraits['water_block_chance'] = 20;
             $effects[] = 'Blocage 20 %';
         }

@@ -54,8 +54,16 @@ class Combatant
         public readonly int $accuracy,
         public readonly int $resistance,
         public readonly array $attacks,
-        /** Réduction flat % de tous les dégâts subis (passif mystique). */
+        /** Réduction flat % de tous les dégâts subis (passif mystique uniquement). */
         public float $damageReductionPct = 0.0,
+        /** Bonus % aux dégâts infligés à des ennemis PVE (extension DMGPVE%). */
+        public float $pveDamagePctBonus = 0.0,
+        /** Bonus % aux dégâts infligés en contexte PVP (extension DMGPVP%). */
+        public float $pvpDamagePctBonus = 0.0,
+        /** Réduction % des dégâts subis en PVE (attaquant = ennemi, extension REDPVE%). */
+        public float $pveReductionPct = 0.0,
+        /** Réduction % des dégâts subis en PVP (attaquant = joueur, extension REDPVP%). */
+        public float $pvpReductionPct = 0.0,
         /** @var array<string, mixed> Traits passifs runtime (procs, comportements). */
         public array $passiveTraits = [],
     ) {

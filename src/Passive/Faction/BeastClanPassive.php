@@ -6,20 +6,20 @@ use App\Passive\CombatContext;
 use App\Passive\PassiveInterface;
 
 /**
- * Clan des Bêtes — paliers 1 / 3 / 6.
+ * Clan des Bêtes — paliers 1 / 2 / 3.
  *
  * À chaque début de tour : chance d'enrager pour 2 tours
  * (enrage = +10 % ATK / DEF / VIT).
  * Si l'unité enragée tue une cible, elle attaque une deuxième fois.
  *
  *   1 : 15 % chance
- *   3 : 30 %
- *   6 : 50 %
+ *   2 : 30 %
+ *   3 : 50 %
  */
 class BeastClanPassive implements PassiveInterface
 {
     public function getSlug(): string { return 'beast_clan'; }
-    public function thresholds(): array { return [1, 3, 6]; }
+    public function thresholds(): array { return [1, 2, 3]; }
 
     public function apply(CombatContext $context): void
     {
@@ -27,8 +27,8 @@ class BeastClanPassive implements PassiveInterface
         if ($count < 1) return;
 
         $chance = match (true) {
-            $count >= 6 => 50,
-            $count >= 3 => 30,
+            $count >= 3 => 50,
+            $count >= 2 => 30,
             default     => 15,
         };
 

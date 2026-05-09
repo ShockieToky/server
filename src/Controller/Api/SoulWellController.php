@@ -85,7 +85,7 @@ class SoulWellController extends AbstractController
             $toRemove[] = $uh;
         }
 
-        $stonesEarned = intdiv($starTotal, 5);
+        $stonesEarned = $starTotal;
 
         // Supprimer les héros sacrifiés
         foreach ($toRemove as $uh) {
@@ -114,7 +114,6 @@ class SoulWellController extends AbstractController
             'sacrificed'   => count($toRemove),
             'totalStars'   => $starTotal,
             'stonesEarned' => $stonesEarned,
-            'remainder'    => $starTotal % 10,
         ]);
     }
 }

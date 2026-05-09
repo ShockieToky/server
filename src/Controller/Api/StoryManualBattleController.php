@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Battle\ActiveEffect;
 use App\Battle\Combatant;
 use App\Battle\TurnEntry;
+use App\Entity\Hero;
 use App\Entity\User;
 use App\Entity\UserStoryProgress;
 use App\Passive\CombatContext;
@@ -235,13 +236,47 @@ class StoryManualBattleController extends AbstractController
                     }
                 }
 
+                // Récompenses + XP des héros
+                $earnedRewards = [];
+                $heroXpResults = [];
+                $stage2 = $this->stageRepository->find($stageId);
+
+                // Récompenses
+                if ($stage2 !== null) {
+                    foreach ($stage2->getRewards() as $reward) {
+                        $qty = $reward->getQuantity();
+                        $earnedRewards[] = [
+                            'rewardType' => $reward->getRewardType(),
+                            'quantity'   => $qty,
+                            'item'       => $reward->getItem()   ? ['id' => $reward->getItem()->getId(),   'name' => $reward->getItem()->getName()]   : null,
+                            'scroll'     => $reward->getScroll() ? ['id' => $reward->getScroll()->getId(), 'name' => $reward->getScroll()->getName()] : null,
+                        ];
+                        if ($reward->getRewardType() === 'gold') {
+                            $user->setGoldToken($user->getGoldToken() + $qty);
+                        }
+                    }
+                }
+
+                // XP
+                $xpPerHero = $stage2?->getXpReward() ?? ($totalWaves * 100);
+                $userHeroIds = $storyMeta['userHeroIds'] ?? [];
+                foreach ($userHeroIds as $uhId) {
+                    $uh = $this->userHeroRepository->find((int) $uhId);
+                    if ($uh === null || $uh->getUser()?->getId() !== $user->getId()) continue;
+                    $xpResult        = $uh->addXp($xpPerHero);
+                    $heroXpResults[] = array_merge(['userHeroId' => $uh->getId(), 'heroName' => $uh->getHero()->getName(), 'xpGained' => $xpPerHero], $xpResult);
+                }
+                $this->em->flush();
+
                 return $this->json([
                     'state'     => $newState,
                     'storyMeta' => array_merge($storyMeta, [
-                        'waveIndex'   => $waveIndex,
-                        'waveCleared' => true,
-                        'victory'     => true,
-                        'defeat'      => false,
+                        'waveIndex'      => $waveIndex,
+                        'waveCleared'    => true,
+                        'victory'        => true,
+                        'defeat'         => false,
+                        'rewards'        => $earnedRewards,
+                        'heroXpResults'  => $heroXpResults,
                     ]),
                 ]);
             }
@@ -407,6 +442,10 @@ class StoryManualBattleController extends AbstractController
             $extVitFlat  = 0;
             $extPrecFlat = 0;
             $extResFlat  = 0;
+            $extDmgPvePct = 0.0;
+            $extDmgPvpPct = 0.0;
+            $extRedPvePct = 0.0;
+            $extRedPvpPct = 0.0;
             foreach ($userHero->getModules() as $module) {
                 foreach ($module->getSlots() as $slot) {
                     $ue = $slot->getUserExtension();
@@ -414,15 +453,19 @@ class StoryManualBattleController extends AbstractController
                     $stat = $ue->getExtension()->getStat();
                     $val  = $ue->getRolledValue();
                     match ($stat) {
-                        'HP%'   => $extHpPct    += $val,
-                        'ATK%'  => $extAtkPct   += $val,
-                        'DEF%'  => $extDefPct   += $val,
-                        'TCC%'  => $extTccFlat  += $val,
-                        'DC%'   => $extDcFlat   += $val,
-                        'VIT+'  => $extVitFlat  += $val,
-                        'PREC+' => $extPrecFlat += $val,
-                        'RES+'  => $extResFlat  += $val,
-                        default => null,
+                        'HP%'     => $extHpPct     += $val,
+                        'ATK%'    => $extAtkPct    += $val,
+                        'DEF%'    => $extDefPct    += $val,
+                        'TCC%'    => $extTccFlat   += $val,
+                        'DC%'     => $extDcFlat    += $val,
+                        'VIT+'    => $extVitFlat   += $val,
+                        'PREC+'   => $extPrecFlat  += $val,
+                        'RES+'    => $extResFlat   += $val,
+                        'DMGPVE%' => $extDmgPvePct += $val,
+                        'DMGPVP%' => $extDmgPvpPct += $val,
+                        'REDPVE%' => $extRedPvePct += $val,
+                        'REDPVP%' => $extRedPvpPct += $val,
+                        default   => null,
                     };
                 }
             }
@@ -432,9 +475,9 @@ class StoryManualBattleController extends AbstractController
                 id:                 'hero_' . $userHero->getId() . '_' . $hero->getId(),
                 side:               'player',
                 name:               $hero->getName(),
-                maxHp:              max(1, (int) round($hero->getHp()     * (1.0 + $extHpPct  / 100.0))),
-                baseAttack:         max(1, (int) round($hero->getAttack()  * $ctx->attackMultiplier  * (1.0 + $extAtkPct / 100.0))),
-                baseDefense:        max(1, (int) round($hero->getDefense() * $ctx->defenseMultiplier * (1.0 + $extDefPct / 100.0))),
+                maxHp:              max(1, (int) round(Hero::scaleStat($hero->getHp(),      $userHero->getLevel()) * (1.0 + $extHpPct  / 100.0))),
+                baseAttack:         max(1, (int) round(Hero::scaleStat($hero->getAttack(),  $userHero->getLevel()) * $ctx->attackMultiplier  * (1.0 + $extAtkPct / 100.0))),
+                baseDefense:        max(1, (int) round(Hero::scaleStat($hero->getDefense(), $userHero->getLevel()) * $ctx->defenseMultiplier * (1.0 + $extDefPct / 100.0))),
                 baseSpeed:          max(1, (int) round($hero->getSpeed()   * $ctx->speedMultiplier) + $ctx->flatSpeedBonus + $extVitFlat),
                 critRate:           min(100, $hero->getCritRate()   + (int) round($ctx->critChanceBonus * 100) + $extTccFlat),
                 critDamage:         $hero->getCritDamage()          + (int) round($ctx->critDamageBonus * 100) + $extDcFlat,
@@ -442,6 +485,10 @@ class StoryManualBattleController extends AbstractController
                 resistance:         min(100, $hero->getResistance() + $ctx->resistanceBonus + $extResFlat),
                 attacks:            $attacks,
                 damageReductionPct: $ctx->damageReductionPct,
+                pveDamagePctBonus:  $extDmgPvePct,
+                pvpDamagePctBonus:  $extDmgPvpPct,
+                pveReductionPct:    $extRedPvePct,
+                pvpReductionPct:    $extRedPvpPct,
                 passiveTraits:      $ctx->passiveTraits,
             );
 
@@ -546,6 +593,10 @@ class StoryManualBattleController extends AbstractController
             resistance:         (int) $cs['resistance'],
             attacks:            $attacks,
             damageReductionPct: (float) ($cs['damageReductionPct'] ?? 0.0),
+            pveDamagePctBonus:  (float) ($cs['pveDamagePctBonus']  ?? 0.0),
+            pvpDamagePctBonus:  (float) ($cs['pvpDamagePctBonus']  ?? 0.0),
+            pveReductionPct:    (float) ($cs['pveReductionPct']    ?? 0.0),
+            pvpReductionPct:    (float) ($cs['pvpReductionPct']    ?? 0.0),
             passiveTraits:      (array) ($cs['passiveTraits']      ?? []),
         );
 
@@ -650,6 +701,10 @@ class StoryManualBattleController extends AbstractController
             'accuracy'         => $c->accuracy,
             'resistance'       => $c->resistance,
             'damageReductionPct' => $c->damageReductionPct,
+            'pveDamagePctBonus'  => $c->pveDamagePctBonus,
+            'pvpDamagePctBonus'  => $c->pvpDamagePctBonus,
+            'pveReductionPct'    => $c->pveReductionPct,
+            'pvpReductionPct'    => $c->pvpReductionPct,
             'passiveTraits'    => $c->passiveTraits,
             'effects'          => array_map(fn(ActiveEffect $e) => [
                 'name'           => $e->name,

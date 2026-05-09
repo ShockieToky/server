@@ -67,6 +67,7 @@ class StoryController extends AbstractController
                 'unlocked'    => $unlocked,
                 'completed'   => $completed,
                 'rewardClaimed' => $claimed,
+                'xpReward'    => $stage->getXpReward() ?? (count($stage->getWaves()) * 100),
                 'rewards'     => array_map(fn($r) => [
                     'id'         => $r->getId(),
                     'rewardType' => $r->getRewardType(),

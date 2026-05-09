@@ -5,6 +5,7 @@ namespace App\Controller\Api;
 use App\Battle\ActiveEffect;
 use App\Battle\Combatant;
 use App\Battle\TurnEntry;
+use App\Entity\Hero;
 use App\Entity\User;
 use App\Entity\UserDungeonProgress;
 use App\Entity\UserInventory;
@@ -71,8 +72,6 @@ class DungeonManualBattleController extends AbstractController
             return $this->json(['message' => 'heroIds doit contenir 1 à 4 IDs'], Response::HTTP_BAD_REQUEST);
         }
 
-        $bonusFactionId   = (int) ($body['bonusFactionId']   ?? 0);
-        $bonusOrigineId   = (int) ($body['bonusOrigineId']   ?? 0);
         $enclaveDirection = is_string($body['enclaveDirection'] ?? null) ? $body['enclaveDirection'] : 'nord';
 
         // ── Chargement et validation des UserHero ─────────────────────────────
@@ -92,7 +91,7 @@ class DungeonManualBattleController extends AbstractController
 
         // ── Construction des combattants ──────────────────────────────────────
         [$heroCombatants, $maxFoeAccDebuff] = $this->buildHeroCombatants(
-            $selectedUserHeroes, $bonusFactionId, $bonusOrigineId, $enclaveDirection,
+            $selectedUserHeroes, $enclaveDirection,
         );
 
         $waveCombatants = $this->buildAllWaves($dungeon, $maxFoeAccDebuff);
@@ -122,8 +121,6 @@ class DungeonManualBattleController extends AbstractController
                 'totalWaves'       => $totalWaves,
                 'stepCount'        => 0,
                 'userHeroIds'      => array_map(fn($uh) => $uh->getId(), $selectedUserHeroes),
-                'bonusFactionId'   => $bonusFactionId,
-                'bonusOrigineId'   => $bonusOrigineId,
                 'enclaveDirection' => $enclaveDirection,
                 'maxFoeAccDebuff'  => $maxFoeAccDebuff,
                 'waveCleared'      => false,
@@ -278,15 +275,30 @@ class DungeonManualBattleController extends AbstractController
                     $this->em->flush();
                 }
 
+                // XP des héros
+                $heroXpResults = [];
+                $xpPerHero = $dungeon->getXpReward() ?? ($totalWaves * 100);
+                $userHeroIds = $dungeonMeta['userHeroIds'] ?? [];
+                foreach ($userHeroIds as $uhId) {
+                    $uh = $this->userHeroRepository->find((int) $uhId);
+                    if ($uh === null || $uh->getUser()?->getId() !== $user->getId()) continue;
+                    $xpResult        = $uh->addXp($xpPerHero);
+                    $heroXpResults[] = array_merge(['userHeroId' => $uh->getId(), 'heroName' => $uh->getHero()->getName(), 'xpGained' => $xpPerHero], $xpResult);
+                }
+                if (!empty($heroXpResults)) {
+                    $this->em->flush();
+                }
+
                 return $this->json([
                     'state'       => $newState,
                     'dungeonMeta' => array_merge($dungeonMeta, [
-                        'waveIndex'   => $waveIndex,
-                        'stepCount'   => $stepCount,
-                        'waveCleared' => true,
-                        'victory'     => true,
-                        'defeat'      => false,
-                        'rewards'     => $rewards,
+                        'waveIndex'      => $waveIndex,
+                        'stepCount'      => $stepCount,
+                        'waveCleared'    => true,
+                        'victory'        => true,
+                        'defeat'         => false,
+                        'rewards'        => $rewards,
+                        'heroXpResults'  => $heroXpResults,
                     ]),
                 ]);
             }
@@ -397,7 +409,7 @@ class DungeonManualBattleController extends AbstractController
      * @param \App\Entity\UserHero[] $userHeroes
      * @return array{list<Combatant>, int}
      */
-    private function buildHeroCombatants(array $userHeroes, int $bonusFactionId, int $bonusOrigineId, string $enclaveDirection): array
+    private function buildHeroCombatants(array $userHeroes, string $enclaveDirection): array
     {
         $heroCombatants  = [];
         $maxFoeAccDebuff = 0;
@@ -412,9 +424,6 @@ class DungeonManualBattleController extends AbstractController
             $origCount = count(array_filter($userHeroes, fn($u) => $u->getHero()->getOrigine()?->getId() === $orig->getId()));
             $tmpCtx = new CombatContext();
             $tmpCtx->alliedOrigineCount = $origCount;
-            if ($bonusOrigineId > 0 && $orig->getId() === $bonusOrigineId) {
-                $tmpCtx->playerOrigineBonus = 1;
-            }
             $this->bonusResolver->applyOriginePassive($orig, $tmpCtx);
             $teamOrigineCtx->applyFrom($tmpCtx);
         }
@@ -436,9 +445,6 @@ class DungeonManualBattleController extends AbstractController
                         $ctx->alliedFactionCount++;
                     }
                 }
-                if ($bonusFactionId > 0 && $hero->getFaction()?->getId() === $bonusFactionId) {
-                    $ctx->playerFactionBonus = 2;
-                }
                 $this->bonusResolver->applyFactionPassive($hero->getFaction(), $ctx);
             }
             // Passifs d'origine : s'appliquent à tous les héros (pré-calculés)
@@ -453,6 +459,10 @@ class DungeonManualBattleController extends AbstractController
             $extVitFlat  = 0;
             $extPrecFlat = 0;
             $extResFlat  = 0;
+            $extDmgPvePct = 0.0;
+            $extDmgPvpPct = 0.0;
+            $extRedPvePct = 0.0;
+            $extRedPvpPct = 0.0;
             foreach ($userHero->getModules() as $module) {
                 foreach ($module->getSlots() as $slot) {
                     $ue = $slot->getUserExtension();
@@ -460,15 +470,19 @@ class DungeonManualBattleController extends AbstractController
                     $stat = $ue->getExtension()->getStat();
                     $val  = $ue->getRolledValue();
                     match ($stat) {
-                        'HP%'   => $extHpPct    += $val,
-                        'ATK%'  => $extAtkPct   += $val,
-                        'DEF%'  => $extDefPct   += $val,
-                        'TCC%'  => $extTccFlat  += $val,
-                        'DC%'   => $extDcFlat   += $val,
-                        'VIT+'  => $extVitFlat  += $val,
-                        'PREC+' => $extPrecFlat += $val,
-                        'RES+'  => $extResFlat  += $val,
-                        default => null,
+                        'HP%'     => $extHpPct     += $val,
+                        'ATK%'    => $extAtkPct    += $val,
+                        'DEF%'    => $extDefPct    += $val,
+                        'TCC%'    => $extTccFlat   += $val,
+                        'DC%'     => $extDcFlat    += $val,
+                        'VIT+'    => $extVitFlat   += $val,
+                        'PREC+'   => $extPrecFlat  += $val,
+                        'RES+'    => $extResFlat   += $val,
+                        'DMGPVE%' => $extDmgPvePct += $val,
+                        'DMGPVP%' => $extDmgPvpPct += $val,
+                        'REDPVE%' => $extRedPvePct += $val,
+                        'REDPVP%' => $extRedPvpPct += $val,
+                        default   => null,
                     };
                 }
             }
@@ -478,9 +492,9 @@ class DungeonManualBattleController extends AbstractController
                 id:                 'hero_' . $userHero->getId() . '_' . $hero->getId(),
                 side:               'player',
                 name:               $hero->getName(),
-                maxHp:              max(1, (int) round($hero->getHp()     * (1.0 + $extHpPct  / 100.0))),
-                baseAttack:         max(1, (int) round($hero->getAttack()  * $ctx->attackMultiplier  * (1.0 + $extAtkPct / 100.0))),
-                baseDefense:        max(1, (int) round($hero->getDefense() * $ctx->defenseMultiplier * (1.0 + $extDefPct / 100.0))),
+                maxHp:              max(1, (int) round(Hero::scaleStat($hero->getHp(),      $userHero->getLevel()) * (1.0 + $extHpPct  / 100.0))),
+                baseAttack:         max(1, (int) round(Hero::scaleStat($hero->getAttack(),  $userHero->getLevel()) * $ctx->attackMultiplier  * (1.0 + $extAtkPct / 100.0))),
+                baseDefense:        max(1, (int) round(Hero::scaleStat($hero->getDefense(), $userHero->getLevel()) * $ctx->defenseMultiplier * (1.0 + $extDefPct / 100.0))),
                 baseSpeed:          max(1, (int) round($hero->getSpeed()   * $ctx->speedMultiplier) + $ctx->flatSpeedBonus + $extVitFlat),
                 critRate:           min(100, $hero->getCritRate()   + (int) round($ctx->critChanceBonus * 100) + $extTccFlat),
                 critDamage:         $hero->getCritDamage()          + (int) round($ctx->critDamageBonus * 100) + $extDcFlat,
@@ -488,6 +502,10 @@ class DungeonManualBattleController extends AbstractController
                 resistance:         min(100, $hero->getResistance() + $ctx->resistanceBonus + $extResFlat),
                 attacks:            $attacks,
                 damageReductionPct: $ctx->damageReductionPct,
+                pveDamagePctBonus:  $extDmgPvePct,
+                pvpDamagePctBonus:  $extDmgPvpPct,
+                pveReductionPct:    $extRedPvePct,
+                pvpReductionPct:    $extRedPvpPct,
                 passiveTraits:      $ctx->passiveTraits,
             );
 
@@ -590,6 +608,10 @@ class DungeonManualBattleController extends AbstractController
             resistance:         (int) $cs['resistance'],
             attacks:            $attacks,
             damageReductionPct: (float) ($cs['damageReductionPct'] ?? 0.0),
+            pveDamagePctBonus:  (float) ($cs['pveDamagePctBonus']  ?? 0.0),
+            pvpDamagePctBonus:  (float) ($cs['pvpDamagePctBonus']  ?? 0.0),
+            pveReductionPct:    (float) ($cs['pveReductionPct']    ?? 0.0),
+            pvpReductionPct:    (float) ($cs['pvpReductionPct']    ?? 0.0),
             passiveTraits:      (array) ($cs['passiveTraits']      ?? []),
         );
 
@@ -694,6 +716,10 @@ class DungeonManualBattleController extends AbstractController
             'accuracy'           => $c->accuracy,
             'resistance'         => $c->resistance,
             'damageReductionPct' => $c->damageReductionPct,
+            'pveDamagePctBonus'  => $c->pveDamagePctBonus,
+            'pvpDamagePctBonus'  => $c->pvpDamagePctBonus,
+            'pveReductionPct'    => $c->pveReductionPct,
+            'pvpReductionPct'    => $c->pvpReductionPct,
             'passiveTraits'      => $c->passiveTraits,
             'effects'            => array_map(fn(ActiveEffect $e) => [
                 'name'           => $e->name,

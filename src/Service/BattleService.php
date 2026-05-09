@@ -363,8 +363,14 @@ class BattleService
                 $bonusMult *= 2.5;
             }
 
-            // Multiplicateur PvE : ×2 quand la cible est un ennemi (PvE uniquement, sans impact PvP)
-            $pveMult = $target->side === 'enemy' ? 2.0 : 1.0;
+            // Bonus dégâts contextuel (extensions DMGPVE% / DMGPVP%)
+            if ($target->side === 'enemy') {
+                if ($actor->pveDamagePctBonus > 0.0) {
+                    $bonusMult *= 1.0 + $actor->pveDamagePctBonus / 100.0;
+                }
+            } elseif ($actor->pvpDamagePctBonus > 0.0) {
+                $bonusMult *= 1.0 + $actor->pvpDamagePctBonus / 100.0;
+            }
 
             // Application des hits
             $totalDmg = 0;
@@ -373,8 +379,14 @@ class BattleService
                 $isCrit   = random_int(0, 99) < $effectiveCritRate;
                 $critMult = $isCrit ? 1.0 + $actor->critDamage / 100.0 : 1.0;
 
-                $dmg    = max(1, (int) floor($rawPerHit * $critMult * $bonusMult * $pveMult * (1.0 - $defPen)));
+                $dmg    = max(1, (int) floor($rawPerHit * $critMult * $bonusMult * (1.0 - $defPen)));
                 $dmg    = $this->computeIncomingAfterBlocks($target, $dmg, $log);
+                // Réduction dégâts contextuelle (extensions REDPVE% / REDPVP%)
+                if ($actor->side === 'enemy' && $target->pveReductionPct > 0.0) {
+                    $dmg = max(1, (int) floor($dmg * (1.0 - $target->pveReductionPct / 100.0)));
+                } elseif ($actor->side !== 'enemy' && $target->pvpReductionPct > 0.0) {
+                    $dmg = max(1, (int) floor($dmg * (1.0 - $target->pvpReductionPct / 100.0)));
+                }
                 $actual    = $target->takeDamage($dmg);
                 $totalDmg += $actual;
 
